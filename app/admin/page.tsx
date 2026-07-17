@@ -285,7 +285,29 @@ export default function Admin(){
     return pipeline;
   }, [orders]);
 
-  if(access!=="allowed") return <div className="admin-access">{auth&&<AuthModal onClose={()=>setAuth(false)} reason="Please sign in with an authorized administrator account to continue."/>}<Link href="/" className="logo"><span>T</span>Taiga<small>ADMIN</small></Link><div className="access-card"><Store/><h1>{access==="checking"?"Checking access…":access==="setup"?"Database upgrade required":access==="denied"?"Admin access required":"Admin console"}</h1><p>{access==="setup"?"Run the prepared schema and live-commerce upgrade in Supabase.":access==="denied"?"This account has not been assigned the admin role.":"Sign in with your administrator account."}</p>{access==="guest"&&<button onClick={()=>setAuth(true)}>Sign in</button>}{access==="denied"&&<button onClick={()=>supabase.auth.signOut()}>Sign out</button>}<Link href="/">Return to store</Link></div></div>;
+  if(access!=="allowed") return <main style={{minHeight:"100vh",display:"grid",gridTemplateColumns:"minmax(320px,.92fr) minmax(420px,1.08fr)",background:"#f4f7f5",fontFamily:'Inter,system-ui,-apple-system,"Segoe UI",sans-serif',color:"#13201c"}}>
+    {auth&&<AuthModal onClose={()=>setAuth(false)} reason="Please sign in with an authorized administrator account to continue."/>}
+    <section style={{position:"relative",overflow:"hidden",display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"48px clamp(32px,5vw,76px)",background:"linear-gradient(145deg,#082f25 0%,#0b604a 58%,#0d7a5f 100%)",color:"white"}}>
+      <div aria-hidden="true" style={{position:"absolute",width:420,height:420,borderRadius:"50%",border:"1px solid rgba(255,255,255,.12)",right:-150,top:-120}}/>
+      <div aria-hidden="true" style={{position:"absolute",width:260,height:260,borderRadius:"50%",background:"rgba(255,255,255,.055)",left:-90,bottom:-70}}/>
+      <Link href="/" style={{position:"relative",display:"inline-flex",alignItems:"center",gap:13,color:"white",textDecoration:"none",fontSize:25,fontWeight:900,letterSpacing:"-.04em"}}><span style={{width:46,height:46,display:"grid",placeItems:"center",borderRadius:13,background:"white",color:"#0d7a5f",boxShadow:"0 12px 28px rgba(0,0,0,.2)"}}>T</span><span>Taiga<small style={{display:"block",fontSize:9,letterSpacing:".22em",color:"#a7f3d0",marginTop:2}}>ADMINISTRATION</small></span></Link>
+      <div style={{position:"relative",maxWidth:520}}><span style={{display:"inline-flex",padding:"7px 11px",border:"1px solid rgba(255,255,255,.18)",borderRadius:999,background:"rgba(255,255,255,.08)",fontSize:11,fontWeight:800,letterSpacing:".12em",textTransform:"uppercase"}}>Secure operations</span><h1 style={{fontSize:"clamp(38px,5vw,64px)",lineHeight:1.02,letterSpacing:"-.055em",margin:"22px 0 18px",fontWeight:900}}>Run your store with clarity.</h1><p style={{maxWidth:460,color:"rgba(255,255,255,.76)",fontSize:16,lineHeight:1.7}}>Manage products, fulfil orders, publish campaigns and monitor performance from one protected workspace.</p></div>
+      <p style={{position:"relative",fontSize:11,color:"rgba(255,255,255,.55)"}}>Taiga Online Shopping Limited · Authorized personnel only</p>
+    </section>
+    <section style={{display:"grid",placeItems:"center",padding:"40px 24px"}}>
+      <div style={{width:"min(440px,100%)",background:"white",border:"1px solid #dfe7e3",borderRadius:18,padding:"clamp(28px,5vw,46px)",boxShadow:"0 24px 70px rgba(15,40,31,.09)"}}>
+        <div style={{width:52,height:52,display:"grid",placeItems:"center",borderRadius:14,background:"#e8f6f0",color:"#0d7a5f",marginBottom:24}}><Store size={25}/></div>
+        <span style={{fontSize:11,fontWeight:900,letterSpacing:".13em",textTransform:"uppercase",color:"#0d7a5f"}}>Administration portal</span>
+        <h2 style={{fontSize:30,lineHeight:1.15,letterSpacing:"-.035em",margin:"9px 0 10px",fontWeight:900}}>{access==="checking"?"Verifying access…":access==="setup"?"Database update needed":access==="denied"?"Access restricted":"Welcome back"}</h2>
+        <p style={{fontSize:14,lineHeight:1.65,color:"#64736d",marginBottom:26}}>{access==="setup"?"The commerce database must be upgraded before administrators can continue.":access==="denied"?"This account is signed in, but it has not been assigned the administrator role.":access==="checking"?"Securely checking your administrator session.":"Sign in with an authorized administrator account to continue."}</p>
+        {access==="checking"&&<div style={{height:4,borderRadius:999,background:"#e5ece9",overflow:"hidden",marginBottom:22}}><span style={{display:"block",width:"58%",height:"100%",background:"#0d7a5f",borderRadius:999}}/></div>}
+        {access==="guest"&&<button onClick={()=>setAuth(true)} style={{width:"100%",minHeight:50,border:0,borderRadius:10,background:"#0d7a5f",color:"white",fontSize:14,fontWeight:800,cursor:"pointer",boxShadow:"0 10px 24px rgba(13,122,95,.2)"}}>Sign in securely</button>}
+        {access==="denied"&&<button onClick={()=>supabase.auth.signOut()} style={{width:"100%",minHeight:50,border:"1px solid #dfe7e3",borderRadius:10,background:"white",color:"#13201c",fontSize:14,fontWeight:800,cursor:"pointer"}}>Sign out and use another account</button>}
+        <Link href="/" style={{display:"block",marginTop:18,textAlign:"center",color:"#0d7a5f",fontSize:13,fontWeight:750,textDecoration:"none"}}>← Return to storefront</Link>
+      </div>
+    </section>
+    <style>{`@media(max-width:850px){main{grid-template-columns:1fr!important}main>section:first-of-type{min-height:360px;padding:32px 24px!important}main>section:first-of-type h1{font-size:42px!important}main>section:last-of-type{padding:28px 16px!important}}`}</style>
+  </main>;
   
   return <div className="dashboard-shell" style={{ display: "grid", gridTemplateColumns: sidebarCollapsed ? "76px 1fr" : "278px 1fr", transition: "grid-template-columns 0.3s ease" }}>{notice&&<div className="toast">{notice}</div>}
     {mobile&&<button className="sidebar-scrim" aria-label="Close navigation" onClick={()=>setMobile(false)}/>}
