@@ -304,7 +304,7 @@ export default function ProductPage(){
                   <li>Genuine product with quality assurance and barcode verification.</li>
                   <li>Official Taiga Online Shopping Limited warranty certificate included.</li>
                   <li>Nationwide tracking enabled door-to-door delivery.</li>
-                  <li>Easy 14-day hassle-free return window.</li>
+                  <li>7-day warranty from the date of purchase.</li>
                 </ul>
               </article>
               
@@ -325,7 +325,7 @@ export default function ProductPage(){
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
                 <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><ShieldCheck size={14} /> Warranty Terms</h3>
                 <p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>
-                  This product comes with a 12-month limited warranty. The warranty covers manufacturing defects and structural failures. Wear and tear, water damage, and accidental damage are not covered under standard terms.
+                  This product comes with a 7-day warranty from the date of purchase. The warranty covers manufacturing defects and structural failures. Wear and tear, water damage, and accidental damage are not covered.
                 </p>
               </article>
 

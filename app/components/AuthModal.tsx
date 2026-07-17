@@ -30,10 +30,10 @@ export function AuthModal({ onClose, reason, showGoogle=true }: { onClose: () =>
     setMessage("");
     const result = mode === "signin"
       ? await supabase.auth.signInWithPassword({ email:cleanEmail, password })
-      : await supabase.auth.signUp({ email:cleanEmail, password, options: { data: { full_name: cleanName } } });
+      : await supabase.auth.signUp({ email:cleanEmail, password, options: { data: { full_name: cleanName }, emailRedirectTo: window.location.origin } });
     setBusy(false);
     if (result.error) return setMessage(result.error.message.toLowerCase().includes("fetch")?"We could not reach the secure account service. Check your connection and try again.":result.error.message);
-    if (mode === "signup" && !result.data.session) return setMessage("Check your email to confirm your account.");
+    if (mode === "signup" && !result.data.session) return setMessage("Account created. Check your email to confirm your account, then sign in.");
     onClose();
   }
 

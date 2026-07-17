@@ -6,20 +6,22 @@ import {
   LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings, 
   ShoppingCart, Store, Tags, Trash2, Truck, Users, Wallet, X, 
   TrendingUp, ArrowUpRight, ArrowDownRight, Edit3, ClipboardCheck,
-  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock
+  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { AuthModal } from "../components/AuthModal";
 
-type Tab="Dashboard"|"Orders"|"Products"|"Customers"|"Categories"|"Analytics"|"Marketing"|"Settings";
+type Tab="Dashboard"|"Orders"|"Products"|"Customers"|"Administrators"|"Categories"|"Analytics"|"Marketing"|"Audit Logs"|"Settings";
 const navigation:[Tab,any][]=[
   ["Dashboard", LayoutDashboard],
   ["Orders", ShoppingCart],
   ["Products", Package],
   ["Customers", Users],
+  ["Administrators", ShieldCheck],
   ["Categories", Tags],
   ["Analytics", BarChart3],
   ["Marketing", Bell],
+  ["Audit Logs", ClipboardCheck],
   ["Settings", Settings]
 ];
 const emptyProduct={name:"",slug:"",description:"",price:"",compare_at_price:"",image_url:"",badge:"New",rating:"4.5",inventory:"0",category_id:"",is_active:true};
@@ -34,12 +36,14 @@ export default function Admin(){
   const [products,setProducts]=useState<any[]>([]),
         [orders,setOrders]=useState<any[]>([]),
         [customers,setCustomers]=useState<any[]>([]),
+        [administrators,setAdministrators]=useState<any[]>([]),
+        [auditLogs,setAuditLogs]=useState<any[]>([]),
         [categories,setCategories]=useState<any[]>([]),
         [subscribers,setSubscribers]=useState<any[]>([]),
         [loading,setLoading]=useState(true),
         [search,setSearch]=useState("");
   
-  const [editing,setEditing]=useState<any|null>(null),
+  const [page,setPage]=useState(1),[editing,setEditing]=useState<any|null>(null),
         [editingBanner,setEditingBanner]=useState<any|null>(null),
         [banners,setBanners]=useState<any[]>([]),
         [categoryName,setCategoryName]=useState(""),
@@ -83,7 +87,7 @@ export default function Admin(){
 
   async function load(){
     setLoading(true);
-    const [p,o,cats,users,subs,settingsResult,bannerResult,imageRows]=await Promise.all([
+    const [p,o,cats,users,subs,settingsResult,bannerResult,imageRows,logsResult]=await Promise.all([
       supabase.from("products").select("*,categories(name)").order("created_at",{ascending:false}),
       supabase.from("orders").select("*,order_items(product_name,quantity)").order("created_at",{ascending:false}),
       supabase.from("categories").select("*").order("name"),
@@ -91,7 +95,8 @@ export default function Admin(){
       supabase.from("newsletter_subscribers").select("*").order("created_at",{ascending:false}),
       supabase.from("store_settings").select("*").eq("id",1).maybeSingle(),
       supabase.from("banners").select("*").order("placement").order("sort_order"),
-      supabase.from("product_images").select("*").order("sort_order")
+      supabase.from("product_images").select("*").order("sort_order"),
+      supabase.from("admin_audit_logs").select("*").order("created_at",{ascending:false}).limit(500)
     ]);
     
     setProducts((p.data??[]).map((product:any)=>({
@@ -100,7 +105,9 @@ export default function Admin(){
     })));
     setOrders(o.data??[]);
     setCategories(cats.data??[]);
-    setCustomers(users.data??[]);
+    setCustomers((users.data??[]).filter((profile:any)=>profile.role==="customer"));
+    setAdministrators((users.data??[]).filter((profile:any)=>profile.role==="admin"));
+    setAuditLogs(logsResult.data??[]);
     setSubscribers(subs.data??[]);
     if(settingsResult.data) setStoreSettings(settingsResult.data);
     setBanners(bannerResult.data??[]);
@@ -121,6 +128,14 @@ export default function Admin(){
   function flash(s:string){
     setNotice(s);
     setTimeout(()=>setNotice(""),2500);
+  }
+
+  async function setAdministrator(id:string,enabled:boolean){
+    if(!confirm(enabled?"Grant this customer administrator access?":"Remove administrator access from this account?"))return;
+    const {error}=await supabase.rpc("set_administrator",{target_user:id,make_admin:enabled});
+    if(error)return flash(error.message.includes("schema cache")?"Run the RBAC migration in Supabase first.":error.message);
+    flash(enabled?"Administrator access granted":"Administrator access removed");
+    await load();
   }
 
   async function saveProduct(e:React.FormEvent<HTMLFormElement>){
@@ -189,6 +204,7 @@ export default function Admin(){
   async function orderStatus(id:string,status:string){
     const {error}=await supabase.from("orders").update({status,updated_at:new Date().toISOString()}).eq("id",id);
     if(error) return flash(error.message);
+    await supabase.rpc("write_admin_log",{log_action:"order.status_changed",log_entity_type:"order",log_entity_id:id,log_details:{status}});
     load();
   }
 
@@ -457,7 +473,7 @@ export default function Admin(){
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProducts.map(p=>(
+                  {filteredProducts.slice((page-1)*10,page*10).map(p=>(
                     <tr key={p.id} style={{ borderBottom: "1px solid var(--border)" }}>
                       <td style={{ padding: "16px" }}>
                         <div className="product-admin-cell" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
@@ -533,6 +549,7 @@ export default function Admin(){
                   ))}
                 </tbody>
               </table>
+              <Pagination page={page} total={filteredProducts.length} pageSize={10} change={setPage}/>
             </div>
           )}
 
@@ -544,11 +561,11 @@ export default function Admin(){
                     <th style={{ padding: "16px", textAlign: "left", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: "var(--muted)" }}>Customer Name</th>
                     <th style={{ padding: "16px", textAlign: "left", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: "var(--muted)" }}>Email address</th>
                     <th style={{ padding: "16px", textAlign: "left", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: "var(--muted)" }}>Account Role</th>
-                    <th style={{ padding: "16px", textAlign: "left", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: "var(--muted)" }}>Date Joined</th>
+                    <th style={{ padding: "16px", textAlign: "left", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: "var(--muted)" }}>Date Joined</th><th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {customers.map(c=>(
+                  {customers.slice((page-1)*10,page*10).map(c=>(
                     <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
                       <td style={{ padding: "16px", fontSize: "13px" }}>
                         <strong>{c.full_name||c.email?.split("@")[0]||"Customer"}</strong>
@@ -557,13 +574,18 @@ export default function Admin(){
                       <td style={{ padding: "16px" }}>
                         <span className="role-pill" style={{ textTransform: "uppercase" }}>{c.role}</span>
                       </td>
-                      <td style={{ padding: "16px", fontSize: "13px", color: "var(--muted)" }}>{new Date(c.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: "16px", fontSize: "13px", color: "var(--muted)" }}>{new Date(c.created_at).toLocaleDateString()}</td><td><button className="banner-edit-action" onClick={()=>setAdministrator(c.id,true)}>Make admin</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <Pagination page={page} total={customers.length} pageSize={10} change={setPage}/>
             </div>
           )}
+
+          {tab==="Administrators"&&<div className="admin-table-wrap" style={{marginTop:24}}><table className="admin-table"><thead><tr><th>Administrator</th><th>Email</th><th>Joined</th><th>Access</th></tr></thead><tbody>{administrators.slice((page-1)*10,page*10).map(person=><tr key={person.id}><td><strong>{person.full_name||"Administrator"}</strong></td><td>{person.email||"—"}</td><td>{new Date(person.created_at).toLocaleDateString()}</td><td><button className="banner-edit-action" onClick={()=>setAdministrator(person.id,false)}>Remove admin</button></td></tr>)}</tbody></table><Pagination page={page} total={administrators.length} pageSize={10} change={setPage}/></div>}
+
+          {tab==="Audit Logs"&&<div className="admin-table-wrap" style={{marginTop:24}}><table className="admin-table"><thead><tr><th>Action</th><th>Entity</th><th>Actor</th><th>Date</th></tr></thead><tbody>{auditLogs.slice((page-1)*15,page*15).map(log=><tr key={log.id}><td><strong>{log.action}</strong></td><td>{log.entity_type}{log.entity_id?` · ${log.entity_id}`:""}</td><td>{log.actor_id}</td><td>{new Date(log.created_at).toLocaleString()}</td></tr>)}</tbody></table><Pagination page={page} total={auditLogs.length} pageSize={15} change={setPage}/></div>}
 
           {tab==="Categories" && (
             <div className="category-admin" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "24px", marginTop: "24px" }}>
@@ -885,7 +907,10 @@ function PanelTitle({title,sub}:{title:string;sub:string}){
   </div>
 }
 
+function Pagination({page,total,pageSize,change}:{page:number;total:number;pageSize:number;change:(page:number)=>void}){const pages=Math.max(1,Math.ceil(total/pageSize));return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderTop:"1px solid var(--border)",fontSize:12,color:"var(--muted)"}}><span>{total?`${(page-1)*pageSize+1}–${Math.min(page*pageSize,total)} of ${total}`:"No records"}</span><div style={{display:"flex",gap:8}}><button disabled={page<=1} onClick={()=>change(page-1)} style={{padding:"7px 12px",border:"1px solid var(--border)",borderRadius:8}}>Previous</button><button disabled={page>=pages} onClick={()=>change(page+1)} style={{padding:"7px 12px",border:"1px solid var(--border)",borderRadius:8}}>Next</button></div></div>}
+
 function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:string,s:string)=>void;onViewDetails:(order:any)=>void}){
+  const [page,setPage]=useState(1),visible=orders.slice((page-1)*10,page*10);
   return <div className="panel table-panel" style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "24px", marginTop: "24px" }}>
     <PanelTitle title="All customer orders" sub="Track payments, adjust fulfillment pipelines, and access receipts" />
     <div className="admin-table-scroll" style={{ overflowX: "auto", marginTop: "20px" }}>
@@ -901,7 +926,7 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
           </tr>
         </thead>
         <tbody>
-          {orders.map(o=>(
+          {visible.map(o=>(
             <tr key={o.id} style={{ borderBottom: "1px solid var(--border)" }}>
               <td style={{ padding: "16px" }}>
                 <strong style={{ fontSize: "13px" }}>{o.order_number}</strong>
@@ -952,6 +977,7 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
         </tbody>
       </table>
     </div>
+    <Pagination page={page} total={orders.length} pageSize={10} change={setPage}/>
   </div>
 }
 
