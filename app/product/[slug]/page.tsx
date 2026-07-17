@@ -243,7 +243,7 @@ export default function ProductPage(){
           <div className="buy-row" style={{ display: "flex", gap: "16px", marginTop: "28px" }}>
             <div className="detail-qty" style={{ display: "flex", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden", background: "var(--secondary)" }}>
               <button onClick={()=>setQty(Math.max(1,qty-1))} style={{ width: "40px", height: "44px" }}><Minus/></button>
-              <span style={{ width: "44px", display: "grid", placeItems: "center", fontSiz: "14px", fontWeight: "750" }}>{qty}</span>
+              <span style={{ width: "44px", display: "grid", placeItems: "center", fontSize: "14px", fontWeight: "750" }}>{qty}</span>
               <button onClick={()=>setQty(Math.min(product.inventory,qty+1))} style={{ width: "40px", height: "44px" }}><Plus/></button>
             </div>
             <button className="add-main" onClick={add} disabled={product.inventory===0} style={{ flex: 1, height: "44px" }}>

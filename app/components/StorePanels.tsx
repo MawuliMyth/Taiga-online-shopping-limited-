@@ -163,7 +163,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
           </div>
           
           <div style={{ padding: "0 16px 16px 16px", borderTop: "1px solid var(--border)" }}>
-            <small style={{ display: "block", color: "var(--muted)", marginVertical: "6px" }}>
+            <small style={{ display: "block", color: "var(--muted)", margin: "6px 0" }}>
               {row.order_items?.map((item:any)=>`${item.product_name} × ${item.quantity}`).join(", ")}
             </small>
           </div>
