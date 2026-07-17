@@ -12,6 +12,14 @@ export function AuthModal({ onClose, reason }: { onClose: () => void; reason?: s
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
+  async function socialSignIn(provider:"google"|"apple"){
+    setBusy(true);
+    setMessage("");
+    const redirectTo=`${window.location.origin}${window.location.pathname}`;
+    const {error}=await supabase.auth.signInWithOAuth({provider,options:{redirectTo}});
+    if(error){setBusy(false);setMessage(error.message.includes("provider is not enabled")?`${provider==="google"?"Google":"Apple"} sign-in has not been enabled in Supabase yet.`:error.message)}
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault(); 
     const cleanEmail=email.trim().toLowerCase(),cleanName=name.trim();
@@ -24,7 +32,7 @@ export function AuthModal({ onClose, reason }: { onClose: () => void; reason?: s
       ? await supabase.auth.signInWithPassword({ email:cleanEmail, password })
       : await supabase.auth.signUp({ email:cleanEmail, password, options: { data: { full_name: cleanName } } });
     setBusy(false);
-    if (result.error) return setMessage(result.error.message);
+    if (result.error) return setMessage(result.error.message.toLowerCase().includes("fetch")?"We could not reach the secure account service. Check your connection and try again.":result.error.message);
     if (mode === "signup" && !result.data.session) return setMessage("Check your email to confirm your account.");
     onClose();
   }
@@ -48,6 +56,11 @@ export function AuthModal({ onClose, reason }: { onClose: () => void; reason?: s
       <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "24px" }}>{mode === "signin" ? "Sign in securely to manage your cart, orders, and wishlist." : "Register to save favorites, track orders, and checkout faster."}</p>
       
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div className="social-auth-grid">
+          <button type="button" onClick={()=>socialSignIn("google")} disabled={busy} className="social-auth-button"><span className="google-mark">G</span>Continue with Google</button>
+          <button type="button" onClick={()=>socialSignIn("apple")} disabled={busy} className="social-auth-button"><span className="apple-mark">●</span>Continue with Apple</button>
+        </div>
+        <div className="auth-divider"><span>or continue with email</span></div>
         {mode === "signup" && (
           <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "11px", fontWeight: 700 }}>
             Full name
