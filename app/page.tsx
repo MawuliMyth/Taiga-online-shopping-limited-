@@ -68,7 +68,6 @@ function ProductCard({ product, onAdd, onLike, isLiked }: { product: Product; on
 }
 
 export default function Home() {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [cart, setCart] = useState(0);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState("All");
@@ -151,11 +150,6 @@ export default function Home() {
     }
   }
 
-  async function signInWithGoogle(){
-    const {error}=await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin}});
-    if(error)flash(error.message.includes("provider is not enabled")?"Google sign-in is awaiting provider setup.":error.message);
-  }
-
   function flash(text:string){setNotice(text); window.setTimeout(()=>setNotice(""),2400)}
   function requireAuth(reason:string){setAuthReason(reason);setShowAuth(true)}
   async function openProtectedPanel(target:"cart"|"wishlist"|"orders",reason:string){const current=user??(await supabase.auth.getSession()).data.session?.user??null;if(current){setUser(current);setShowAuth(false);setPanel(target);return}requireAuth(reason)}
@@ -222,20 +216,18 @@ export default function Home() {
     <div className="announcement"><span>{storeSettings.announcement_left}</span><span>{storeSettings.announcement_center}</span><span>Call / WhatsApp: {storeSettings.support_phone||"0800 466 3639"}</span></div>
     <header className="site-header">
       <div className="header-main wrap">
-        <button className="mobile-menu" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu">{menuOpen ? <X /> : <Menu />}</button>
         <Link href="/" className="logo"><span>T</span>Taiga<small>MARKET</small></Link>
         <div className="search-shell"><div className="search"><Search size={19} /><input value={query} onFocus={()=>setSearchOpen(true)} onChange={e => {setQuery(e.target.value);setSearchOpen(true)}} placeholder="Search products, brands and categories" /><button onClick={()=>{setSearchOpen(false);document.querySelector("#deals")?.scrollIntoView({behavior:"smooth"})}}>Search</button></div>{searchOpen&&<div className="search-popover"><div className="search-popover-title"><span>{query?"Matching products":"Trending searches"}</span><button onClick={()=>setSearchOpen(false)}><X size={16}/></button></div>{query?<div className="search-results">{liveProducts.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())).slice(0,5).map(p=><button key={p.id} onClick={()=>{setQuery(p.name);setSearchOpen(false);document.querySelector("#deals")?.scrollIntoView({behavior:"smooth"})}}><img src={p.image} alt=""/><span>{p.name}<small>{p.category}</small></span><strong>₦{p.price.toLocaleString()}</strong></button>)}</div>:<div className="trend-tags">{["headphones","air fryer","iphone","shoes for men","smart watch"].map(t=><button key={t} onClick={()=>{setQuery(t);setSearchOpen(false)}}>{t}</button>)}</div>}</div>}</div>
         <div className="header-actions">
           <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle dark mode">
             {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
           </button>
-          {authReady&&!user&&<button className="header-google-signin" onClick={signInWithGoogle} aria-label="Continue with Google"><span>G</span><b>Sign in with Google</b></button>}
           <button onClick={()=>openProtectedPanel("orders","Please sign in first to access your account and orders.")}><CircleUserRound /><span>{!authReady?"Checking account":user?"Your account":"Hello, sign in"}<small>{user ? user.email?.split("@")[0] : "My account"}</small></span></button>
           <button className="icon-action" onClick={()=>openProtectedPanel("wishlist","Please sign in first to view your saved products.")} aria-label="Open wishlist"><Heart /><b>{wishlist.size}</b></button>
           <button className="icon-action cart-action" onClick={()=>openProtectedPanel("cart","Please sign in first to view and manage your cart.")} aria-label="Open cart"><ShoppingCart /><span>Cart</span><b>{cart}</b></button>
         </div>
       </div>
-      <nav className={`nav wrap ${menuOpen ? "open" : ""}`}>
+      <nav className="nav wrap">
         <button className="departments" onMouseEnter={()=>setDepartmentsOpen(true)} onFocus={()=>setDepartmentsOpen(true)} onClick={()=>setDepartmentsOpen(!departmentsOpen)}><Menu size={17} /> Categories <ChevronDown size={15} /></button>
         <a href="#deals">Today&apos;s deals</a><a href="#categories">Categories</a><a href="#new">New arrivals</a><a href="#popular">Most wanted</a>
         <button onClick={() => setTrackerOpen(true)} className="admin-link" style={{ background: "transparent", border: "0", cursor: "pointer", fontSize: "inherit", fontWeight: "inherit", padding: "8px 0" }}>

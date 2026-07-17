@@ -286,7 +286,7 @@ export default function Admin(){
   }, [orders]);
 
   if(access!=="allowed") return <main style={{minHeight:"100vh",display:"grid",gridTemplateColumns:"minmax(320px,.92fr) minmax(420px,1.08fr)",background:"#f4f7f5",fontFamily:'Inter,system-ui,-apple-system,"Segoe UI",sans-serif',color:"#13201c"}}>
-    {auth&&<AuthModal onClose={()=>setAuth(false)} reason="Please sign in with an authorized administrator account to continue."/>}
+    {auth&&<AuthModal showGoogle={false} onClose={()=>setAuth(false)} reason="Please sign in with an authorized administrator account to continue."/>}
     <section style={{position:"relative",overflow:"hidden",display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"48px clamp(32px,5vw,76px)",background:"linear-gradient(145deg,#082f25 0%,#0b604a 58%,#0d7a5f 100%)",color:"white"}}>
       <div aria-hidden="true" style={{position:"absolute",width:420,height:420,borderRadius:"50%",border:"1px solid rgba(255,255,255,.12)",right:-150,top:-120}}/>
       <div aria-hidden="true" style={{position:"absolute",width:260,height:260,borderRadius:"50%",background:"rgba(255,255,255,.055)",left:-90,bottom:-70}}/>
