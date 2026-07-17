@@ -14,22 +14,26 @@ import {
 } from "lucide-react";
 
 const defaultCategories = [
+  { name: "Computers and Accessories", icon: Laptop, image: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=400&q=80", subcategories:["Laptops","Desktop Computers","Monitors","Computer Accessories"] },
+  { name: "Phones and tablets", icon: Smartphone, image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=400&q=80", subcategories:["Mobile Phones","iPhone","Phone Accessories","Tablets"] },
   { name: "Electronics", icon: Headphones, image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=400&q=80", subcategories:["Televisions","Audio & Headphones","Cameras","Home Theatre","Gaming"] },
   { name: "Fashion", icon: Shirt, image: "https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?auto=format&fit=crop&w=400&q=80", subcategories:["Men's Fashion","Women's Fashion","Shoes","Bags","Watches"] },
-  { name: "Computing", icon: Laptop, image: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=400&q=80", subcategories:["Laptops","Desktops","Monitors","Storage","Computer Accessories"] },
-  { name: "Mobile", icon: Smartphone, image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=400&q=80", subcategories:["Smartphones","Tablets","Phone Accessories","Power Banks","Smart Watches"] },
-  { name: "Beauty", icon: Sparkles, image: "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=400&q=80", subcategories:["Skincare","Makeup","Hair Care","Fragrances","Personal Care"] },
-  { name: "Groceries", icon: ShoppingBag, image: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80", subcategories:["Food Cupboard","Beverages","Breakfast Foods","Household Supplies","Baby Products"] },
+  { name: "Home and Kitchen", icon: Store, image: "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=400&q=80", subcategories:["Large Appliances","Small Appliances","Home Furnishings","Kitchen and Dining"] },
+  { name: "Drinks and Groceries", icon: ShoppingBag, image: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80", subcategories:["Drinks","Alcoholic Beverages","Foods","Beverages"] },
+  { name: "Others", icon: Sparkles, image: "https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=400&q=80", subcategories:["Generators","UPS and Surge Protectors","Solar Energy"] },
 ];
 
 const departmentDetails: Record<string,{title:string;items:string[]}[]> = {
+  "Computers and Accessories":[{title:"Computers",items:["Laptops","Desktop Computers","Monitors","Computer Components"]},{title:"Accessories",items:["Keyboards and Mice","Storage Devices","Printers","Networking"]}],
+  "Phones and tablets":[{title:"Phones",items:["Mobile Phones (Smartphones and Feature Phones)","iPhone","Desk, Radio and Intercom Phones"]},{title:"Accessories",items:["Mobile Phone Accessories","Tablet Accessories"]},{title:"Tablets",items:["Tablets","Android Tablets","iPads"]}],
   Electronics:[{title:"Television & Video",items:["Smart TVs","LED TVs","Projectors","Streaming Devices"]},{title:"Audio",items:["Headphones","Bluetooth Speakers","Home Theatre","Soundbars"]},{title:"Cameras",items:["Digital Cameras","Security Cameras","Camera Accessories"]}],
   Fashion:[{title:"Women's Fashion",items:["Dresses","Shoes","Handbags","Jewellery"]},{title:"Men's Fashion",items:["Shirts","Trousers","Sneakers","Watches"]},{title:"Kids",items:["Girls' Fashion","Boys' Fashion","School Wear"]}],
-  Computing:[{title:"Computers",items:["Laptops","Desktop Computers","Monitors","Tablets"]},{title:"Accessories",items:["Keyboards & Mice","Storage Devices","Printers","Networking"]},{title:"Gaming",items:["Gaming Laptops","Controllers","PC Gaming Accessories"]}],
-  Mobile:[{title:"Phones",items:["Android Phones","iPhones","Feature Phones","Refurbished Phones"]},{title:"Accessories",items:["Power Banks","Chargers","Cases & Covers","Earphones"]},{title:"Wearables",items:["Smart Watches","Fitness Trackers"]}],
-  Beauty:[{title:"Beauty & Personal Care",items:["Skincare","Makeup","Fragrances","Hair Care"]},{title:"Health Care",items:["Vitamins","Medical Supplies","Oral Care"]},{title:"Grooming",items:["Men's Grooming","Bath & Body","Personal Care"]}],
-  Groceries:[{title:"Food Cupboard",items:["Rice & Grains","Cooking Oils","Canned Foods","Spices"]},{title:"Drinks",items:["Soft Drinks","Water","Coffee & Tea","Malt Drinks"]},{title:"Household",items:["Cleaning Supplies","Laundry","Paper Products","Baby Care"]}],
+  "Home and Kitchen":[{title:"Appliances",items:["Large Appliances","Small Appliances"]},{title:"Home",items:["Home Furnishings","Furniture","Kids Home Store"]},{title:"Kitchen",items:["Kitchen and Dining","Top Brands"]}],
+  "Drinks and Groceries":[{title:"Drinks",items:["Drinks","Alcoholic Beverages","Beverages"]},{title:"Food",items:["Foods","Food Cupboard","Breakfast Foods"]}],
+  Others:[{title:"Power",items:["Generators and Accessories","UPS and Surge Protectors","Solar and Alternative Energy"]}],
 };
+
+const categoryAliases:Record<string,string>={Computing:"Computers and Accessories",Mobile:"Phones and tablets",Groceries:"Drinks and Groceries",Beauty:"Others"};
 
 type Product = { id: string; slug: string; name: string; category: string; price: number; old: number; rating: number; badge: string; image: string };
 
@@ -118,7 +122,7 @@ export default function Home() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {setUser(session?.user ?? null);setAuthReady(true);if(session?.user)setShowAuth(false)});
     supabase.from("products").select("id,slug,name,price,compare_at_price,rating,badge,image_url,categories(name)").eq("is_active", true).then(({data,error}) => {
       if(error)setCatalogError("The catalogue could not be loaded. Please try again shortly.");
-      else setLiveProducts((data??[]).map((p: any) => ({id:p.id,slug:p.slug,name:p.name,category:p.categories?.name ?? "Other",price:Number(p.price),old:Number(p.compare_at_price ?? p.price),rating:Number(p.rating),badge:p.badge ?? "New",image:p.image_url})));
+      else setLiveProducts((data??[]).map((p: any) => ({id:p.id,slug:p.slug,name:p.name,category:categoryAliases[p.categories?.name]??p.categories?.name??"Others",price:Number(p.price),old:Number(p.compare_at_price ?? p.price),rating:Number(p.rating),badge:p.badge ?? "New",image:p.image_url})));
       setCatalogLoading(false);
     });
     const loadStoreSettings=()=>supabase.from("store_settings").select("*").eq("id",1).maybeSingle().then(({data})=>{if(data){setStoreSettings(data);if(data.flash_sale_ends_at)setTimeLeft(Math.max(0,Math.floor((new Date(data.flash_sale_ends_at).getTime()-Date.now())/1000)))}});
@@ -126,7 +130,6 @@ export default function Home() {
     const refreshStoreSettings=()=>loadStoreSettings();
     window.addEventListener("focus",refreshStoreSettings);
     supabase.from("banners").select("*").eq("is_active",true).order("sort_order").then(({data})=>{setBanners(data??[]);setBannersLoaded(true)});
-    supabase.from("categories").select("name").order("name").then(({data})=>{if(data?.length)setCatalogCategories(data.map((row:any)=>defaultCategories.find(c=>c.name===row.name)??{name:row.name,icon:ShoppingBag,image:"https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=400&q=80",subcategories:[`All ${row.name}`,"New arrivals","Best sellers"]}))});
     return () => {listener.subscription.unsubscribe();window.removeEventListener("focus",refreshStoreSettings)};
   }, []);
 
