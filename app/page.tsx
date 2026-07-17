@@ -151,6 +151,11 @@ export default function Home() {
     }
   }
 
+  async function signInWithGoogle(){
+    const {error}=await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin}});
+    if(error)flash(error.message.includes("provider is not enabled")?"Google sign-in is awaiting provider setup.":error.message);
+  }
+
   function flash(text:string){setNotice(text); window.setTimeout(()=>setNotice(""),2400)}
   function requireAuth(reason:string){setAuthReason(reason);setShowAuth(true)}
   async function openProtectedPanel(target:"cart"|"wishlist"|"orders",reason:string){const current=user??(await supabase.auth.getSession()).data.session?.user??null;if(current){setUser(current);setShowAuth(false);setPanel(target);return}requireAuth(reason)}
@@ -224,6 +229,7 @@ export default function Home() {
           <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle dark mode">
             {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
           </button>
+          {authReady&&!user&&<button className="header-google-signin" onClick={signInWithGoogle} aria-label="Continue with Google"><span>G</span><b>Sign in with Google</b></button>}
           <button onClick={()=>openProtectedPanel("orders","Please sign in first to access your account and orders.")}><CircleUserRound /><span>{!authReady?"Checking account":user?"Your account":"Hello, sign in"}<small>{user ? user.email?.split("@")[0] : "My account"}</small></span></button>
           <button className="icon-action" onClick={()=>openProtectedPanel("wishlist","Please sign in first to view your saved products.")} aria-label="Open wishlist"><Heart /><b>{wishlist.size}</b></button>
           <button className="icon-action cart-action" onClick={()=>openProtectedPanel("cart","Please sign in first to view and manage your cart.")} aria-label="Open cart"><ShoppingCart /><span>Cart</span><b>{cart}</b></button>
