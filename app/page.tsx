@@ -10,7 +10,7 @@ import {
   ArrowRight, BadgeCheck, ChevronDown, ChevronLeft, ChevronRight, CircleUserRound,
   Heart, Headphones, Laptop, Menu, PackageCheck, Search, Shirt,
   ShoppingBag, ShoppingCart, Smartphone, Sparkles, Star, Store, Truck,
-  X, Zap, Sun, Moon, Clock, MapPin, ClipboardCheck
+  X, Zap, Sun, Moon, Clock, MapPin, ClipboardCheck, UserRound, Mail, LogOut
 } from "lucide-react";
 
 const defaultCategories = [
@@ -84,7 +84,8 @@ export default function Home() {
   const [authReason,setAuthReason]=useState("Please sign in first to continue.");
   const [wishlist, setWishlist] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState("");
-  const [panel,setPanel]=useState<"cart"|"wishlist"|"orders"|null>(null);
+  const [panel,setPanel]=useState<"cart"|"wishlist"|"orders"|"account"|"inbox"|null>(null);
+  const [accountMenuOpen,setAccountMenuOpen]=useState(false);
   const [searchOpen,setSearchOpen]=useState(false);
   const [departmentsOpen,setDepartmentsOpen]=useState(false);
   const [hoveredDepartment,setHoveredDepartment]=useState("Electronics");
@@ -155,7 +156,8 @@ export default function Home() {
 
   function flash(text:string){setNotice(text); window.setTimeout(()=>setNotice(""),2400)}
   function requireAuth(reason:string){setAuthReason(reason);setShowAuth(true)}
-  async function openProtectedPanel(target:"cart"|"wishlist"|"orders",reason:string){const current=user??(await supabase.auth.getSession()).data.session?.user??null;if(current){setUser(current);setShowAuth(false);setPanel(target);return}requireAuth(reason)}
+  async function openProtectedPanel(target:"cart"|"wishlist"|"orders"|"account"|"inbox",reason:string){setAccountMenuOpen(false);const current=user??(await supabase.auth.getSession()).data.session?.user??null;if(current){setUser(current);setShowAuth(false);setPanel(target);return}requireAuth(reason)}
+  async function signOut(){setAccountMenuOpen(false);setPanel(null);await supabase.auth.signOut();flash("You have signed out safely")}
   
   async function addToCart(product: Product){
     if(!user){requireAuth("Please sign in first to add products to your cart.");return}
@@ -225,7 +227,16 @@ export default function Home() {
           <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle dark mode">
             {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
           </button>
-          <button onClick={()=>openProtectedPanel("orders","Please sign in first to access your account and orders.")}><CircleUserRound /><span>{!authReady?"Checking account":user?"Your account":"Hello, sign in"}<small>{user ? user.email?.split("@")[0] : "My account"}</small></span></button>
+          <div className="account-menu-shell">
+            <button className="account-trigger" aria-haspopup="menu" aria-expanded={accountMenuOpen} onClick={()=>user?setAccountMenuOpen(open=>!open):openProtectedPanel("account","Please sign in first to access your account.")}><CircleUserRound /><span>{!authReady?"Checking account":user?`Hi, ${user.user_metadata?.full_name?.split(" ")[0]||user.email?.split("@")[0]}`:"Hello, sign in"}<small>{user?"My account":"Account"}</small></span>{user&&<ChevronDown className={accountMenuOpen?"rotated":""} size={15}/>}</button>
+            {user&&accountMenuOpen&&<div className="account-dropdown" role="menu">
+              <button role="menuitem" onClick={()=>openProtectedPanel("account","Please sign in first to access your account.")}><UserRound/><span>My Account<small>Profile and account details</small></span></button>
+              <button role="menuitem" onClick={()=>openProtectedPanel("orders","Please sign in first to view your orders.")}><ShoppingBag/><span>Orders<small>Track current purchases</small></span></button>
+              <button role="menuitem" onClick={()=>openProtectedPanel("inbox","Please sign in first to view your inbox.")}><Mail/><span>Inbox<small>Order updates and notices</small></span></button>
+              <button role="menuitem" onClick={()=>openProtectedPanel("wishlist","Please sign in first to view your saved products.")}><Heart/><span>Wishlist<small>{wishlist.size} saved {wishlist.size===1?"item":"items"}</small></span></button>
+              <button className="account-signout" role="menuitem" onClick={signOut}><LogOut/><span>Sign out<small>End this session</small></span></button>
+            </div>}
+          </div>
           <button className="icon-action" onClick={()=>openProtectedPanel("wishlist","Please sign in first to view your saved products.")} aria-label="Open wishlist"><Heart /><b>{wishlist.size}</b></button>
           <button className="icon-action cart-action" onClick={()=>openProtectedPanel("cart","Please sign in first to view and manage your cart.")} aria-label="Open cart"><ShoppingCart /><span>Cart</span><b>{cart}</b></button>
         </div>

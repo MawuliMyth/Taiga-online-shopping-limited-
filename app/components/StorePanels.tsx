@@ -4,7 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { 
   Check, CheckCircle2, CreditCard, Heart, Minus, Package, Plus, 
   ShieldCheck, ShoppingCart, Trash2, X, Clock, Truck, PackageCheck, 
-  ClipboardCheck, ChevronDown, ChevronUp, AlertCircle
+  ClipboardCheck, ChevronDown, ChevronUp, AlertCircle, UserRound, Mail
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { nigeriaCities, nigeriaStates } from "../data/nigeriaLocations";
@@ -22,7 +22,7 @@ function addressInputRules(key:string){
 
 declare global { interface Window { PaystackPop?:new()=>{resumeTransaction:(accessCode:string)=>void} } }
 
-export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist"|"orders";user:User;onClose:()=>void;onChanged:()=>void}){
+export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist"|"orders"|"account"|"inbox";user:User;onClose:()=>void;onChanged:()=>void}){
   const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[checkout,setCheckout]=useState(false),[step,setStep]=useState(1),[done,setDone]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[addressError,setAddressError]=useState("");
   const [address,setAddress]=useState({first_name:"",last_name:"",phone:"",additional_phone:"",line1:"",additional_info:"",state:"",city:""});
   const [delivery,setDelivery]=useState<""|"standard"|"pickup">("");
@@ -47,7 +47,13 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     setLoading(true);
     const settingsResult=await supabase.from("store_settings").select("free_shipping_threshold,standard_shipping_fee,pickup_shipping_fee").eq("id",1).maybeSingle();
     if(settingsResult.data)setDeliverySettings(settingsResult.data);
-    if(kind==="cart"){
+    if(kind==="account"){
+      const {data}=await supabase.from("profiles").select("full_name,email,created_at").eq("id",user.id).maybeSingle();
+      setRows([{...(data??{}),email:data?.email||user.email,full_name:data?.full_name||user.user_metadata?.full_name||"Taiga customer"}]);
+    }else if(kind==="inbox"){
+      const {data}=await supabase.from("orders").select("id,order_number,status,created_at,total").eq("user_id",user.id).order("created_at",{ascending:false});
+      setRows(data??[]);
+    }else if(kind==="cart"){
       const {data,error:loadError}=await supabase.from("cart_items").select("product_id,quantity,products(name,price,image_url,inventory)").eq("user_id",user.id);
       if(loadError)setError(loadError.message);
       setRows(data??[]);
@@ -141,8 +147,8 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   const isFreeUnlocked = subtotal >= freeThreshold;
   const progressPercent = Math.min(100, (subtotal / freeThreshold) * 100);
 
-  return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:<Package/>}<h2>{kind==="cart"?`Your Cart (${rows.length})`:kind==="wishlist"?"Saved items":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
-  {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:done?<div className="success-state"><div className="success-icon"><CheckCircle2/></div><span>Order confirmed</span><h3>Thank you for your order</h3><p>Your payment was confirmed and your order is being prepared.</p><div className="success-reference"><small>Order reference</small><strong>{done}</strong></div><button onClick={onClose}>Continue shopping</button></div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
+  return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:kind==="account"?<UserRound/>:kind==="inbox"?<Mail/>:<Package/>}<h2>{kind==="cart"?`Your Cart (${rows.length})`:kind==="wishlist"?"Saved items":kind==="account"?"My account":kind==="inbox"?"Inbox":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
+  {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:kind==="account"?<div className="account-panel-content"><div className="account-avatar">{String(rows[0]?.full_name||rows[0]?.email||"T").charAt(0).toUpperCase()}</div><span>Taiga customer</span><h3>{rows[0]?.full_name}</h3><p>{rows[0]?.email}</p><dl><div><dt>Account status</dt><dd>Active</dd></div><div><dt>Member since</dt><dd>{rows[0]?.created_at?new Date(rows[0].created_at).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}):"Recently joined"}</dd></div></dl><p>Your profile is connected to your secure Taiga sign-in.</p></div>:kind==="inbox"?<div className="inbox-list">{rows.length?rows.map(row=><article key={row.id}><span><PackageCheck/></span><div><strong>Order {row.order_number} is {String(row.status).replaceAll("_"," ")}</strong><p>Your order total is {money(Number(row.total))}. Open Orders for full tracking details.</p><small>{new Date(row.created_at).toLocaleString()}</small></div></article>):<div className="panel-empty"><Mail/><h3>Your inbox is clear</h3><p>Updates about your orders will appear here automatically.</p></div>}</div>:done?<div className="success-state"><div className="success-icon"><CheckCircle2/></div><span>Order confirmed</span><h3>Thank you for your order</h3><p>Your payment was confirmed and your order is being prepared.</p><div className="success-reference"><small>Order reference</small><strong>{done}</strong></div><button onClick={onClose}>Continue shopping</button></div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
     
     {kind==="orders" ? rows.map(row=>{
       const isExpanded = expandedOrder === row.id;
