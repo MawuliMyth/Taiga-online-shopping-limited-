@@ -3,6 +3,7 @@ import {readFile} from "node:fs/promises";
 import test from "node:test";
 
 const migration=await readFile(new URL("../supabase/migrations/202607150001_secure_commerce.sql",import.meta.url),"utf8");
+const variantMigration=await readFile(new URL("../supabase/migrations/202607200001_product_variants.sql",import.meta.url),"utf8");
 const initializeRoute=await readFile(new URL("../app/api/paystack/initialize/route.ts",import.meta.url),"utf8");
 const verifyRoute=await readFile(new URL("../app/api/paystack/verify/route.ts",import.meta.url),"utf8");
 
@@ -35,4 +36,12 @@ test("commerce mutations are restricted by RLS or server role",()=>{
   assert.match(migration,/revoke all on function public\.finalize_paid_checkout[\s\S]*authenticated/);
   assert.match(migration,/grant execute on function public\.finalize_paid_checkout[\s\S]*service_role/);
   assert.match(migration,/if not public\.is_admin\(\)/);
+});
+
+test("checkout prices and deducts the exact selected variant",()=>{
+  assert.match(variantMigration,/primary key \(user_id, product_id, variant_key\)/i);
+  assert.match(variantMigration,/selected_variant jsonb/i);
+  assert.match(variantMigration,/item->>'id'=c\.variant_key/i);
+  assert.match(variantMigration,/jsonb_set\(value,'\{inventory\}'/i);
+  assert.match(variantMigration,/A selected product variant is unavailable or out of stock/i);
 });

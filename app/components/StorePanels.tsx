@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { 
   Check, CheckCircle2, CreditCard, Heart, Minus, Package, Plus, 
@@ -9,7 +10,7 @@ import {
 import { supabase } from "../../lib/supabase";
 import { nigeriaCities, nigeriaStates } from "../data/nigeriaLocations";
 
-type CartRow={product_id:string;quantity:number;products:{name:string;price:number;image_url:string;inventory:number}|null};
+type CartRow={product_id:string;variant_key:string;selected_variant:any;quantity:number;products:{name:string;slug:string;price:number;image_url:string;inventory:number;variants:any[]}|null};
 const money=(value:number)=>`₦${value.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
 function addressInputRules(key:string){
@@ -23,6 +24,7 @@ function addressInputRules(key:string){
 declare global { interface Window { PaystackPop?:new()=>{resumeTransaction:(accessCode:string)=>void} } }
 
 export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist"|"orders"|"account"|"inbox";user:User;onClose:()=>void;onChanged:()=>void}){
+  const router=useRouter();
   const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[checkout,setCheckout]=useState(false),[step,setStep]=useState(1),[done,setDone]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[addressError,setAddressError]=useState("");
   const [address,setAddress]=useState({first_name:"",last_name:"",phone:"",additional_phone:"",line1:"",additional_info:"",state:"",city:""});
   const [delivery,setDelivery]=useState<""|"standard"|"pickup">("");
@@ -54,14 +56,14 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
       const {data}=await supabase.from("orders").select("id,order_number,status,created_at,total").eq("user_id",user.id).order("created_at",{ascending:false});
       setRows(data??[]);
     }else if(kind==="cart"){
-      const {data,error:loadError}=await supabase.from("cart_items").select("product_id,quantity,products(name,price,image_url,inventory)").eq("user_id",user.id);
+      const {data,error:loadError}=await supabase.from("cart_items").select("product_id,variant_key,selected_variant,quantity,products(name,slug,price,image_url,inventory,variants)").eq("user_id",user.id);
       if(loadError)setError(loadError.message);
       setRows(data??[]);
     }else if(kind==="wishlist"){
-      const {data}=await supabase.from("wishlist_items").select("product_id,products(name,price,image_url,inventory)").eq("user_id",user.id);
+      const {data}=await supabase.from("wishlist_items").select("product_id,products(name,slug,price,image_url,inventory,variants)").eq("user_id",user.id);
       setRows(data??[]);
     }else{
-      const {data}=await supabase.from("orders").select("id,order_number,total,status,created_at,shipping_address,order_items(product_name,quantity)").eq("user_id",user.id).order("created_at",{ascending:false});
+      const {data}=await supabase.from("orders").select("id,order_number,total,status,created_at,shipping_address,order_items(product_name,quantity,selected_variant)").eq("user_id",user.id).order("created_at",{ascending:false});
       setRows(data??[]);
     }
     setLoading(false);
@@ -70,19 +72,23 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   useEffect(()=>{load()},[kind]);
 
   async function quantity(row:CartRow,next:number){
-    if(next<1) await supabase.from("cart_items").delete().eq("user_id",user.id).eq("product_id",row.product_id);
-    else await supabase.from("cart_items").update({quantity:Math.min(next,row.products?.inventory??next)}).eq("user_id",user.id).eq("product_id",row.product_id);
+    const variantStock=Array.isArray(row.products?.variants)?row.products?.variants.find((variant:any)=>variant.id===row.variant_key)?.inventory:null;
+    if(next<1) await supabase.from("cart_items").delete().eq("user_id",user.id).eq("product_id",row.product_id).eq("variant_key",row.variant_key||"default");
+    else await supabase.from("cart_items").update({quantity:Math.min(next,Number(variantStock??row.products?.inventory??next))}).eq("user_id",user.id).eq("product_id",row.product_id).eq("variant_key",row.variant_key||"default");
     await load();
     onChanged();
   }
 
-  async function remove(id:string){
-    await supabase.from(kind==="cart"?"cart_items":"wishlist_items").delete().eq("user_id",user.id).eq("product_id",id);
+  async function remove(id:string,variantKey="default"){
+    let query=supabase.from(kind==="cart"?"cart_items":"wishlist_items").delete().eq("user_id",user.id).eq("product_id",id);
+    if(kind==="cart")query=query.eq("variant_key",variantKey);
+    await query;
     await load();
     onChanged();
   }
 
   async function moveToCart(row:any){
+    if(Array.isArray(row.products?.variants)&&row.products.variants.length){router.push(`/product/${row.products.slug}`);return}
     await supabase.from("cart_items").upsert({user_id:user.id,product_id:row.product_id,quantity:1});
     await supabase.from("wishlist_items").delete().eq("user_id",user.id).eq("product_id",row.product_id);
     await load();
@@ -138,7 +144,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     }
   }
 
-  const subtotal=rows.reduce((sum,row)=>sum+Number(row.products?.price??0)*(row.quantity??1),0),
+  const subtotal=rows.reduce((sum,row)=>sum+Number(row.selected_variant?.price??(Array.isArray(row.products?.variants)?row.products.variants.find((variant:any)=>variant.id===row.variant_key)?.price:null)??row.products?.price??0)*(row.quantity??1),0),
         shipping=delivery?(delivery==="pickup"?Number(deliverySettings.pickup_shipping_fee):subtotal>=Number(deliverySettings.free_shipping_threshold)?0:Number(deliverySettings.standard_shipping_fee)):null,
         total=subtotal+(shipping??0);
 
@@ -170,7 +176,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
           
           <div style={{ padding: "0 16px 16px 16px", borderTop: "1px solid var(--border)" }}>
             <small style={{ display: "block", color: "var(--muted)", margin: "6px 0" }}>
-              {row.order_items?.map((item:any)=>`${item.product_name} × ${item.quantity}`).join(", ")}
+              {row.order_items?.map((item:any)=>`${item.product_name}${item.selected_variant?.options?` (${Object.values(item.selected_variant.options).join(" / ")})`:""} × ${item.quantity}`).join(", ")}
             </small>
           </div>
 
@@ -253,7 +259,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
           )}
         </article>
       );
-    }) : rows.map(row=><article className="cart-row" key={row.product_id}><img src={row.products?.image_url} alt={row.products?.name||"Cart product"}/><div><h3>{row.products?.name}</h3><span className="cart-variant">Available now · Ships from Taiga</span><strong>{money(Number(row.products?.price))}</strong><small className="stock-note">{row.products?.inventory} units available</small>{kind==="cart"?<div className="qty"><button onClick={()=>quantity(row,row.quantity-1)} aria-label="Decrease quantity"><Minus/></button><span>{row.quantity}</span><button onClick={()=>quantity(row,row.quantity+1)} aria-label="Increase quantity"><Plus/></button></div>:<button className="move-cart" onClick={()=>moveToCart(row)}>Add to cart</button>}</div><button className="remove-row" onClick={()=>remove(row.product_id)} aria-label={`Remove ${row.products?.name||"product"}`}><Trash2/><span>Remove</span></button></article>)}
+    }) : rows.map(row=>{const variant=Array.isArray(row.products?.variants)?row.products.variants.find((item:any)=>item.id===row.variant_key):null,stock=Number(variant?.inventory??row.products?.inventory??0),price=Number(row.selected_variant?.price??variant?.price??row.products?.price??0),options=row.selected_variant?.options??variant?.options;return <article className="cart-row" key={`${row.product_id}-${row.variant_key||"default"}`}><img src={row.selected_variant?.image_url||variant?.image_url||row.products?.image_url} alt={row.products?.name||"Cart product"}/><div><h3>{row.products?.name}</h3><span className="cart-variant">{options?Object.entries(options).map(([key,value])=>`${key}: ${value}`).join(" · "):"Standard item"}</span><strong>{money(price)}</strong><small className="stock-note">{stock} units available</small>{kind==="cart"?<div className="qty"><button onClick={()=>quantity(row,row.quantity-1)} aria-label="Decrease quantity"><Minus/></button><span>{row.quantity}</span><button onClick={()=>quantity(row,row.quantity+1)} aria-label="Increase quantity"><Plus/></button></div>:<button className="move-cart" onClick={()=>moveToCart(row)}>{Array.isArray(row.products?.variants)&&row.products.variants.length?"Choose options":"Add to cart"}</button>}</div><button className="remove-row" onClick={()=>remove(row.product_id,row.variant_key)} aria-label={`Remove ${row.products?.name||"product"}`}><Trash2/><span>Remove</span></button></article>})}
   </div>}
   {kind==="cart"&&rows.length>0&&!done&&<footer>
     {/* Free Shipping Progress Indicator */}

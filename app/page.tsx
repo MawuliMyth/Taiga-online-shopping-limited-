@@ -35,7 +35,7 @@ const departmentDetails: Record<string,{title:string;items:string[]}[]> = {
 
 const categoryAliases:Record<string,string>={Computing:"Computers and Accessories",Mobile:"Phones and tablets",Groceries:"Drinks and Groceries",Beauty:"Others"};
 
-type Product = { id: string; slug: string; name: string; category: string; price: number; old: number; rating: number; badge: string; image: string };
+type Product = { id: string; slug: string; name: string; category: string; price: number; old: number; rating: number; badge: string; image: string; variants?:any[] };
 
 function ProductCard({ product, onAdd, onLike, isLiked }: { product: Product; onAdd: () => void; onLike: () => void; isLiked: boolean }) {
   const [liked, setLiked] = useState(isLiked);
@@ -121,9 +121,9 @@ export default function Home() {
 
     supabase.auth.getSession().then(({data}) => {setUser(data.session?.user??null);setAuthReady(true)});
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {setUser(session?.user ?? null);setAuthReady(true);if(session?.user)setShowAuth(false)});
-    supabase.from("products").select("id,slug,name,price,compare_at_price,rating,badge,image_url,categories(name)").eq("is_active", true).then(({data,error}) => {
+    supabase.from("products").select("id,slug,name,price,compare_at_price,rating,badge,image_url,variants,categories(name)").eq("is_active", true).then(({data,error}) => {
       if(error)setCatalogError("The catalogue could not be loaded. Please try again shortly.");
-      else setLiveProducts((data??[]).map((p: any) => ({id:p.id,slug:p.slug,name:p.name,category:categoryAliases[p.categories?.name]??p.categories?.name??"Others",price:Number(p.price),old:Number(p.compare_at_price ?? p.price),rating:Number(p.rating),badge:p.badge ?? "New",image:p.image_url})));
+      else setLiveProducts((data??[]).map((p: any) => ({id:p.id,slug:p.slug,name:p.name,category:categoryAliases[p.categories?.name]??p.categories?.name??"Others",price:Number(p.price),old:Number(p.compare_at_price ?? p.price),rating:Number(p.rating),badge:p.badge ?? "New",image:p.image_url,variants:p.variants??[]})));
       setCatalogLoading(false);
     });
     const loadStoreSettings=()=>supabase.from("store_settings").select("*").eq("id",1).maybeSingle().then(({data})=>{if(data){setStoreSettings(data);if(data.flash_sale_ends_at)setTimeLeft(Math.max(0,Math.floor((new Date(data.flash_sale_ends_at).getTime()-Date.now())/1000)))}});
@@ -161,6 +161,7 @@ export default function Home() {
   
   async function addToCart(product: Product){
     if(!user){requireAuth("Please sign in first to add products to your cart.");return}
+    if(Array.isArray(product.variants)&&product.variants.length){window.location.href=`/product/${product.slug}`;return}
     const existing = await supabase.from("cart_items").select("quantity").eq("user_id",user.id).eq("product_id",product.id).maybeSingle();
     const result = existing.data ? await supabase.from("cart_items").update({quantity:existing.data.quantity+1,updated_at:new Date().toISOString()}).eq("user_id",user.id).eq("product_id",product.id) : await supabase.from("cart_items").insert({user_id:user.id,product_id:product.id,quantity:1});
     if(result.error) return flash("Cart could not be updated yet."); setCart(cart+1); flash("Added to your cart");

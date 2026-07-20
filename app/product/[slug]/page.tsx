@@ -25,7 +25,8 @@ export default function ProductPage(){
         [auth,setAuth]=useState(false),
         [authReason,setAuthReason]=useState("Please sign in first to continue."),
         [notice,setNotice]=useState(""),
-        [supportPhone,setSupportPhone]=useState("0800 466 3639");
+        [supportPhone,setSupportPhone]=useState("0800 466 3639"),
+        [selectedOptions,setSelectedOptions]=useState<Record<string,string>>({});
 
   // Product page enhancements states
   const [activeTab, setActiveTab] = useState<"details" | "specs" | "warranty">("details");
@@ -93,6 +94,7 @@ export default function ProductPage(){
       }
       const {data:gallery}=await supabase.from("product_images").select("image_url,alt_text,sort_order").eq("product_id",data.id).order("sort_order");
       setProduct({...data,product_images:gallery??[]});
+      setSelectedOptions({});
       setLoading(false);
       
       const {data:r}=await supabase.from("products").select("id,slug,name,price,image_url,badge").eq("category_id",data.category_id).eq("is_active",true).neq("id",data.id).limit(5);
@@ -130,16 +132,24 @@ export default function ProductPage(){
   }, []);
 
   async function add(){
+    const variants=Array.isArray(product.variants)?product.variants.filter((variant:any)=>variant.active!==false):[];
+    const optionNames=Array.from(new Set(variants.flatMap((variant:any)=>Object.keys(variant.options||{})))) as string[];
+    const selectedVariant=variants.find((variant:any)=>optionNames.every(name=>variant.options?.[name]===selectedOptions[name]));
+    if(variants.length&&!selectedVariant){setNotice(`Choose ${optionNames.filter(name=>!selectedOptions[name]).join(", ")||"an available combination"} before adding to cart`);setTimeout(()=>setNotice(""),3000);return}
+    const available=selectedVariant?Number(selectedVariant.inventory):Number(product.inventory);
+    if(available<1){setNotice("This selection is currently out of stock");setTimeout(()=>setNotice(""),2500);return}
     const {data:{user}}=await supabase.auth.getUser();
     if(!user){
       setAuthReason("Please sign in first to add this product to your cart.");
       setAuth(true);
       return;
     }
-    const {data:row}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id).eq("product_id",product.id).maybeSingle();
+    const variantKey=selectedVariant?.id||"default";
+    const selectedVariantSnapshot=selectedVariant?{id:selectedVariant.id,sku:selectedVariant.sku||null,options:selectedVariant.options,price:selectedVariant.price??product.price,image_url:selectedVariant.image_url||null}:null;
+    const {data:row}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id).eq("product_id",product.id).eq("variant_key",variantKey).maybeSingle();
     const result=row
-      ? await supabase.from("cart_items").update({quantity:Math.min(row.quantity+qty,product.inventory)}).eq("user_id",user.id).eq("product_id",product.id)
-      : await supabase.from("cart_items").insert({user_id:user.id,product_id:product.id,quantity:qty});
+      ? await supabase.from("cart_items").update({quantity:Math.min(row.quantity+qty,available),selected_variant:selectedVariantSnapshot}).eq("user_id",user.id).eq("product_id",product.id).eq("variant_key",variantKey)
+      : await supabase.from("cart_items").insert({user_id:user.id,product_id:product.id,variant_key:variantKey,selected_variant:selectedVariantSnapshot,quantity:Math.min(qty,available)});
     setNotice(result.error?result.error.message:`${qty} item${qty>1?"s":""} added to cart`);
     setTimeout(()=>setNotice(""),2500);
   }
@@ -182,11 +192,15 @@ export default function ProductPage(){
   if(loading) return <div className="product-loading product-shimmer" aria-label="Loading product"><div/><div><span/><span/><span/><span/></div></div>;
   if(!product) return <div className="product-loading"><h2>Product not found</h2><Link href="/">Return to store</Link></div>;
 
-  const old=Number(product.compare_at_price??product.price),
-        price=Number(product.price),
+  const variants=Array.isArray(product.variants)?product.variants.filter((variant:any)=>variant.active!==false):[],
+        optionNames=Array.from(new Set(variants.flatMap((variant:any)=>Object.keys(variant.options||{})))) as string[],
+        selectedVariant=variants.find((variant:any)=>optionNames.every(name=>variant.options?.[name]===selectedOptions[name])),
+        price=Number(selectedVariant?.price??product.price),
+        old=Number(product.compare_at_price??price),
         discount=old>price?Math.round((old-price)/old*100):0,
+        availableInventory=selectedVariant?Number(selectedVariant.inventory):variants.length?variants.reduce((sum:number,variant:any)=>sum+Number(variant.inventory||0),0):Number(product.inventory),
         gallery=(product.product_images??[]).sort((a:any,b:any)=>a.sort_order-b.sort_order).map((i:any)=>i.image_url).filter(Boolean),
-        images=gallery.length?gallery:[product.image_url].filter(Boolean);
+        images=Array.from(new Set([...(gallery.length?gallery:[product.image_url]),...variants.map((variant:any)=>variant.image_url).filter(Boolean)])) as string[];
 
   return <div className="product-page">{auth&&<AuthModal reason={authReason} onClose={()=>setAuth(false)}/>} {notice&&<div className="toast">{notice}</div>}
     <header className="product-top"><Link href="/" className="logo"><span>T</span>Taiga<small>MARKET</small></Link><Link href="/"><ArrowLeft/> Continue shopping</Link><Link href="/?panel=cart"><ShoppingCart/> Cart</Link></header>
@@ -229,8 +243,8 @@ export default function ProductPage(){
             </>}
           </div>
           
-          <small className="units-left" style={{ display: "block", marginTop: "8px", fontWeight: "750", color: product.inventory <= 5 ? "var(--danger)" : "var(--primary)" }}>
-            {product.inventory === 0 ? "Out of Stock" : product.inventory <= 5 ? `Only ${product.inventory} units left - order soon` : `${product.inventory} units in stock` }
+          <small className="units-left" style={{ display: "block", marginTop: "8px", fontWeight: "750", color: availableInventory <= 5 ? "var(--danger)" : "var(--primary)" }}>
+            {availableInventory === 0 ? "Out of Stock" : selectedVariant&&availableInventory <= 5 ? `Only ${availableInventory} of this option left — order soon` : selectedVariant?`${availableInventory} of this option in stock`:variants.length?"Choose your options to see exact availability":`${availableInventory} units in stock` }
           </small>
           
           <div className="detail-rating" style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "16px", fontSize: "13px" }}>
@@ -239,14 +253,20 @@ export default function ProductPage(){
             </span>
             <a href="#reviews" style={{ color: "var(--primary)", fontWeight: "650" }}>{product.rating} · Verified customer reviews</a>
           </div>
+
+          {variants.length>0&&<div className="product-options" aria-label="Product options">{optionNames.map(optionName=>{
+            const values=Array.from(new Set(variants.map((variant:any)=>variant.options?.[optionName]).filter(Boolean))) as string[];
+            return <fieldset key={optionName}><legend>{optionName} <span>{selectedOptions[optionName]||"Select one"}</span></legend><div>{values.map(value=>{
+              const possible=variants.some((variant:any)=>variant.options?.[optionName]===value&&Object.entries(selectedOptions).every(([key,selected])=>key===optionName||!selected||variant.options?.[key]===selected)&&Number(variant.inventory)>0);
+              return <button type="button" key={value} className={selectedOptions[optionName]===value?"selected":""} disabled={!possible} onClick={()=>{setSelectedOptions(current=>({...current,[optionName]:value}));setQty(1);const match=variants.find((variant:any)=>variant.options?.[optionName]===value&&Object.entries(selectedOptions).every(([key,selected])=>key===optionName||!selected||variant.options?.[key]===selected));if(match?.image_url){const nextIndex=images.indexOf(match.image_url);if(nextIndex>=0)setImageIndex(nextIndex)}}}>{value}</button>})}</div></fieldset>})}</div>}
           
           <div className="buy-row" style={{ display: "flex", gap: "16px", marginTop: "28px" }}>
             <div className="detail-qty" style={{ display: "flex", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden", background: "var(--secondary)" }}>
               <button onClick={()=>setQty(Math.max(1,qty-1))} style={{ width: "40px", height: "44px" }}><Minus/></button>
               <span style={{ width: "44px", display: "grid", placeItems: "center", fontSize: "14px", fontWeight: "750" }}>{qty}</span>
-              <button onClick={()=>setQty(Math.min(product.inventory,qty+1))} style={{ width: "40px", height: "44px" }}><Plus/></button>
+              <button onClick={()=>setQty(Math.min(availableInventory||1,qty+1))} style={{ width: "40px", height: "44px" }}><Plus/></button>
             </div>
-            <button className="add-main" onClick={add} disabled={product.inventory===0} style={{ flex: 1, height: "44px" }}>
+            <button className="add-main" onClick={add} disabled={availableInventory===0} style={{ flex: 1, height: "44px" }}>
               <ShoppingCart/> Add to cart
             </button>
           </div>

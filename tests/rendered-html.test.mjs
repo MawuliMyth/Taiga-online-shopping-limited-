@@ -31,6 +31,6 @@ test("server-renders the protected admin entry", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Taiga/);
-  assert.match(html, /Checking access/);
-  assert.match(html, /Return to store/);
+  assert.match(html, /Verifying access/);
+  assert.match(html, /Return to storefront/);
 });

@@ -24,7 +24,7 @@ const navigation:[Tab,any][]=[
   ["Audit Logs", ClipboardCheck],
   ["Settings", Settings]
 ];
-const emptyProduct={name:"",slug:"",description:"",price:"",compare_at_price:"",image_url:"",badge:"New",rating:"4.5",inventory:"0",category_id:"",is_active:true};
+const emptyProduct={name:"",slug:"",description:"",price:"",compare_at_price:"",image_url:"",badge:"New",rating:"4.5",inventory:"0",category_id:"",is_active:true,variants:"[]"};
 
 export default function Admin(){
   const [tab,setTab]=useState<Tab>("Dashboard"),
@@ -89,7 +89,7 @@ export default function Admin(){
     setLoading(true);
     const [p,o,cats,users,subs,settingsResult,bannerResult,imageRows,logsResult]=await Promise.all([
       supabase.from("products").select("*,categories(name)").order("created_at",{ascending:false}),
-      supabase.from("orders").select("*,order_items(product_name,quantity)").order("created_at",{ascending:false}),
+      supabase.from("orders").select("*,order_items(product_name,quantity,unit_price,selected_variant)").order("created_at",{ascending:false}),
       supabase.from("categories").select("*").order("name"),
       supabase.from("profiles").select("*").order("created_at",{ascending:false}),
       supabase.from("newsletter_subscribers").select("*").order("created_at",{ascending:false}),
@@ -151,6 +151,15 @@ export default function Admin(){
     payload.compare_at_price=payload.compare_at_price?Number(payload.compare_at_price):null;
     payload.rating=Number(payload.rating);
     payload.inventory=Number(payload.inventory);
+    try{payload.variants=JSON.parse(String(payload.variants||"[]"))}catch{return flash("Product variants could not be read. Remove the invalid row and try again.")}
+    if(!Array.isArray(payload.variants)) return flash("Product variants must be a list.");
+    for(const variant of payload.variants){
+      if(!variant.id||!variant.options||!Object.keys(variant.options).length) return flash("Each variant needs at least one option, such as Size, Colour or Storage.");
+      if(!Number.isInteger(Number(variant.inventory))||Number(variant.inventory)<0) return flash("Every variant inventory must be a whole number of zero or more.");
+      if(variant.price!==null&&variant.price!==""&&(!Number.isFinite(Number(variant.price))||Number(variant.price)<=0)) return flash("Every variant price must be greater than zero or left blank.");
+      variant.inventory=Number(variant.inventory);variant.price=variant.price===""||variant.price===null?null:Number(variant.price);
+    }
+    if(payload.variants.length) payload.inventory=payload.variants.reduce((sum:number,variant:any)=>sum+variant.inventory,0);
     if(!Number.isFinite(payload.price)||payload.price<=0) return flash("Enter a valid product price greater than zero.");
     if(payload.compare_at_price!==null&&payload.compare_at_price<payload.price) return flash("Compare price cannot be lower than the selling price.");
     if(!Number.isInteger(payload.inventory)||payload.inventory<0) return flash("Inventory must be a whole number of zero or more.");
@@ -844,7 +853,7 @@ export default function Admin(){
             <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
               {selectedOrderDetails.order_items?.map((item: any, index: number) => (
                 <div key={index} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", borderBottom: index < selectedOrderDetails.order_items.length - 1 ? "1px solid var(--border)" : "none", fontSize: "12px" }}>
-                  <span>{item.product_name} <strong>× {item.quantity}</strong></span>
+                  <span>{item.product_name}{item.selected_variant?.options?<small style={{display:"block",color:"var(--muted)",marginTop:3}}>{Object.entries(item.selected_variant.options).map(([key,value])=>`${key}: ${value}`).join(" · ")}</small>:null} <strong>× {item.quantity}</strong></span>
                   <strong>₦{(item.unit_price * item.quantity).toLocaleString()}</strong>
                 </div>
               ))}
@@ -932,7 +941,7 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
                 <strong style={{ fontSize: "13px" }}>{o.order_number}</strong>
               </td>
               <td style={{ padding: "16px", fontSize: "12px", color: "var(--muted)", maxWidth: "240px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {o.order_items?.map((i:any)=>`${i.product_name} ×${i.quantity}`).join(", ")}
+                {o.order_items?.map((i:any)=>`${i.product_name}${i.selected_variant?.options?` (${Object.values(i.selected_variant.options).join(" / ")})`:""} ×${i.quantity}`).join(", ")}
               </td>
               <td style={{ padding: "16px", fontSize: "13px", fontWeight: "750" }}>₦{Number(o.total).toLocaleString()}</td>
               <td style={{ padding: "16px" }}>
@@ -983,6 +992,9 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
 
 function ProductEditor({item,categories,close,submit,upload}:{item:any;categories:any[];close:()=>void;submit:(e:React.FormEvent<HTMLFormElement>)=>void;upload:(f:File,set:(u:string)=>void)=>void}){
   const [gallery,setGallery]=useState<string[]>(item.product_images?.sort((a:any,b:any)=>a.sort_order-b.sort_order).map((i:any)=>i.image_url)??(item.image_url?[item.image_url]:[]));
+  const [variants,setVariants]=useState<any[]>(Array.isArray(item.variants)?item.variants:[]);
+  const addVariant=()=>setVariants(current=>[...current,{id:crypto.randomUUID(),options:{Size:"",Colour:"",Storage:""},sku:"",price:"",inventory:0,image_url:""}]);
+  const updateVariant=(index:number,key:string,value:any)=>setVariants(current=>current.map((variant,i)=>i===index?key.startsWith("option.")?{...variant,options:{...variant.options,[key.slice(7)]:value}}:{...variant,[key]:value}:variant));
   const uploadMany=async(files:FileList|null)=>{
     if(!files) return;
     const added:string[]=[];
@@ -995,6 +1007,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
   return <div className="modal-overlay">
     <form className="product-editor animate-scale-up" onSubmit={submit}>
       <input type="hidden" name="gallery_urls" value={JSON.stringify(gallery)}/>
+      <input type="hidden" name="variants" value={JSON.stringify(variants.map(variant=>({...variant,options:Object.fromEntries(Object.entries(variant.options||{}).filter(([,value])=>String(value).trim()))})))}/>
       <header>
         <h2>{item.id?"Edit product":"Add product"}</h2>
         <button type="button" onClick={close}><X/></button>
@@ -1022,7 +1035,8 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
           <input name="compare_at_price" type="number" min="0.01" max="1000000000" step=".01" defaultValue={item.compare_at_price}/>
         </label>
         <label>Inventory
-          <input name="inventory" type="number" min="0" max="10000000" step="1" defaultValue={item.inventory} required/>
+          {variants.length?<input name="inventory" type="number" min="0" max="10000000" step="1" value={variants.reduce((sum,variant)=>sum+Number(variant.inventory||0),0)} readOnly required/>:<input name="inventory" type="number" min="0" max="10000000" step="1" defaultValue={item.inventory} required/>}
+          {variants.length>0&&<small>Calculated automatically from variant stock.</small>}
         </label>
         <label>Badge
           <input name="badge" defaultValue={item.badge} maxLength={30}/>
@@ -1046,6 +1060,22 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
             ))}
           </div>
         </label>
+        <section className="full variant-editor">
+          <div className="variant-editor-heading"><div><strong>Product variants</strong><small>Add combinations only when choices such as size, colour or storage apply.</small></div><button type="button" onClick={addVariant}>+ Add combination</button></div>
+          {variants.length===0?<div className="variant-empty">No variants — customers will add this product directly.</div>:<div className="variant-list">{variants.map((variant,index)=><article key={variant.id}>
+            <div className="variant-row-title"><b>Combination {index+1}</b><button type="button" onClick={()=>setVariants(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
+            <div className="variant-fields">
+              <label>Size<input value={variant.options?.Size||""} onChange={e=>updateVariant(index,"option.Size",e.target.value)} placeholder="e.g. M"/></label>
+              <label>Colour<input value={variant.options?.Colour||""} onChange={e=>updateVariant(index,"option.Colour",e.target.value)} placeholder="e.g. Black"/></label>
+              <label>Storage<input value={variant.options?.Storage||""} onChange={e=>updateVariant(index,"option.Storage",e.target.value)} placeholder="e.g. 128 GB"/></label>
+              <label>Style / Model<input value={variant.options?.Style||""} onChange={e=>updateVariant(index,"option.Style",e.target.value)} placeholder="Optional"/></label>
+              <label>SKU<input value={variant.sku||""} onChange={e=>updateVariant(index,"sku",e.target.value)} placeholder="TAI-BLK-128"/></label>
+              <label>Price override<input type="number" min="0.01" step=".01" value={variant.price??""} onChange={e=>updateVariant(index,"price",e.target.value)} placeholder="Use base price"/></label>
+              <label>Stock<input type="number" min="0" step="1" value={variant.inventory??0} onChange={e=>updateVariant(index,"inventory",e.target.value)} required/></label>
+              <label>Image URL<input type="url" value={variant.image_url||""} onChange={e=>updateVariant(index,"image_url",e.target.value)} placeholder="Optional variant image"/></label>
+            </div>
+          </article>)}</div>}
+        </section>
         <label className="check"><input name="is_active" type="checkbox" defaultChecked={item.is_active}/> Active and visible</label>
       </div>
       <footer>
