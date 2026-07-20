@@ -24,7 +24,7 @@ const navigation:[Tab,any][]=[
   ["Audit Logs", ClipboardCheck],
   ["Settings", Settings]
 ];
-const emptyProduct={name:"",slug:"",description:"",price:"",compare_at_price:"",image_url:"",badge:"New",rating:"4.5",inventory:"0",category_id:"",is_active:true,variants:"[]"};
+const emptyProduct={name:"",slug:"",description:"",price:"",compare_at_price:"",image_url:"",badge:"New",inventory:"0",category_id:"",is_active:true,variants:"[]"};
 
 export default function Admin(){
   const [tab,setTab]=useState<Tab>("Dashboard"),
@@ -149,7 +149,6 @@ export default function Admin(){
     if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(payload.slug)) return flash("Slug may only contain lowercase letters, numbers and single hyphens.");
     payload.price=Number(payload.price);
     payload.compare_at_price=payload.compare_at_price?Number(payload.compare_at_price):null;
-    payload.rating=Number(payload.rating);
     payload.inventory=Number(payload.inventory);
     try{payload.variants=JSON.parse(String(payload.variants||"[]"))}catch{return flash("Product variants could not be read. Remove the invalid row and try again.")}
     if(!Array.isArray(payload.variants)) return flash("Product variants must be a list.");
@@ -163,7 +162,6 @@ export default function Admin(){
     if(!Number.isFinite(payload.price)||payload.price<=0) return flash("Enter a valid product price greater than zero.");
     if(payload.compare_at_price!==null&&payload.compare_at_price<payload.price) return flash("Compare price cannot be lower than the selling price.");
     if(!Number.isInteger(payload.inventory)||payload.inventory<0) return flash("Inventory must be a whole number of zero or more.");
-    if(payload.rating<0||payload.rating>5) return flash("Rating must be between 0 and 5.");
     payload.is_active=f.get("is_active")==="on";
     const gallery=JSON.parse(String(f.get("gallery_urls")||"[]"));
     if(!gallery.length||gallery.some((url:string)=>{try{const parsed=new URL(url);return !["http:","https:"].includes(parsed.protocol)}catch{return true}})) return flash("Add at least one valid http or https product image URL.");
@@ -1040,9 +1038,6 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
         </label>
         <label>Badge
           <input name="badge" defaultValue={item.badge} maxLength={30}/>
-        </label>
-        <label>Rating
-          <input name="rating" type="number" min="0" max="5" step=".1" defaultValue={item.rating}/>
         </label>
         <label className="full">Description
           <textarea name="description" defaultValue={item.description} minLength={10} maxLength={3000}/>

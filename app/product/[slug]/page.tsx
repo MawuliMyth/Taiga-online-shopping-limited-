@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -26,61 +26,15 @@ export default function ProductPage(){
         [authReason,setAuthReason]=useState("Please sign in first to continue."),
         [notice,setNotice]=useState(""),
         [supportPhone,setSupportPhone]=useState("0800 466 3639"),
-        [selectedOptions,setSelectedOptions]=useState<Record<string,string>>({});
+        [selectedOptions,setSelectedOptions]=useState<Record<string,string>>({}),
+        [reviews,setReviews]=useState<any[]>([]),
+        [canReview,setCanReview]=useState(false),
+        [reviewRating,setReviewRating]=useState(5),
+        [reviewBusy,setReviewBusy]=useState(false);
 
   // Product page enhancements states
   const [activeTab, setActiveTab] = useState<"details" | "specs" | "warranty">("details");
   const [showStickyBar, setShowStickyBar] = useState(false);
-
-  // Stable dynamic rating distribution based on the product rating
-  const ratingDistribution = useMemo(() => {
-    if (!product) return [];
-    const R = product.rating || 4.5;
-    const p5 = Math.min(95, Math.max(30, Math.round((R - 3.5) * 60)));
-    const remainder = 100 - p5;
-    const p4 = Math.round(remainder * 0.7);
-    const p3 = Math.round(remainder * 0.2);
-    const p2 = Math.round(remainder * 0.07);
-    const p1 = Math.max(0, 100 - (p5 + p4 + p3 + p2));
-    return [
-      { stars: 5, pct: p5 },
-      { stars: 4, pct: p4 },
-      { stars: 3, pct: p3 },
-      { stars: 2, pct: p2 },
-      { stars: 1, pct: p1 }
-    ];
-  }, [product?.rating]);
-
-  // Stable dynamic reviews based on product name/category
-  const dynamicReviews = useMemo(() => {
-    if (!product) return [];
-    const R = product.rating || 4.5;
-    const names = ["Abiola O.", "Chinedu E.", "Fatima A.", "Olawale K.", "Ngozi U.", "Emeka J."];
-    const comments = [
-      {
-        title: `Highly impressed with this ${product.name}`,
-        body: `The build quality of the ${product.name} exceeded my expectations. Extremely functional and matches the category description perfectly.`,
-        rating: Math.floor(R),
-        date: "3 days ago"
-      },
-      {
-        title: "Prompt delivery and original item",
-        body: `Received this ${product.categories?.name || 'product'} in perfect condition. Verification barcode checked out. Thanks Taiga!`,
-        rating: 5,
-        date: "1 week ago"
-      },
-      {
-        title: "Good value and solid performance",
-        body: `Works exactly as expected. The payment process on the store was instant and support was helpful with shipment coordinates.`,
-        rating: Math.round(R) - 1 || 4,
-        date: "2 weeks ago"
-      }
-    ];
-    return comments.map((c, i) => ({
-      ...c,
-      author: names[i % names.length]
-    }));
-  }, [product?.name, product?.rating, product?.categories]);
 
   useEffect(()=>{
     if(!slug){setLoading(false);return};
@@ -93,6 +47,8 @@ export default function ProductPage(){
         return;
       }
       const {data:gallery}=await supabase.from("product_images").select("image_url,alt_text,sort_order").eq("product_id",data.id).order("sort_order");
+      const {data:reviewRows}=await supabase.from("product_reviews").select("id,user_id,reviewer_name,rating,title,body,created_at").eq("product_id",data.id).order("created_at",{ascending:false});
+      setReviews(reviewRows??[]);
       setProduct({...data,product_images:gallery??[]});
       setSelectedOptions({});
       setLoading(false);
@@ -105,6 +61,8 @@ export default function ProductPage(){
       if(session?.user){
         const {data:fav}=await supabase.from("wishlist_items").select("*").eq("user_id",session.user.id).eq("product_id",data.id).maybeSingle();
         if(fav) setSaved(true);
+        const {data:purchases}=await supabase.from("orders").select("id,order_items!inner(product_id)").eq("user_id",session.user.id).not("paid_at","is",null).neq("status","cancelled").eq("order_items.product_id",data.id).limit(1);
+        setCanReview(Boolean(purchases?.length));
       }
     })();
   },[slug]);
@@ -189,6 +147,20 @@ export default function ProductPage(){
     setTimeout(()=>setNotice(""),2200);
   }
 
+  async function submitReview(event:React.FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const {data:{user}}=await supabase.auth.getUser();
+    if(!user){setAuthReason("Please sign in to review a product you purchased.");setAuth(true);return}
+    const form=new FormData(event.currentTarget),title=String(form.get("title")||"").trim(),body=String(form.get("body")||"").trim();
+    setReviewBusy(true);
+    const payload={product_id:product.id,user_id:user.id,reviewer_name:user.user_metadata?.full_name||user.email?.split("@")[0]||"Taiga customer",rating:reviewRating,title,body,updated_at:new Date().toISOString()};
+    const {error}=await supabase.from("product_reviews").upsert(payload,{onConflict:"product_id,user_id"});
+    if(error){setNotice(error.message.includes("row-level security")?"Only customers who purchased this product can review it.":error.message)}else{
+      const {data}=await supabase.from("product_reviews").select("id,user_id,reviewer_name,rating,title,body,created_at").eq("product_id",product.id).order("created_at",{ascending:false});setReviews(data??[]);event.currentTarget.reset();setReviewRating(5);setNotice("Thank you — your verified review is now live");
+    }
+    setReviewBusy(false);setTimeout(()=>setNotice(""),3000);
+  }
+
   if(loading) return <div className="product-loading product-shimmer" aria-label="Loading product"><div/><div><span/><span/><span/><span/></div></div>;
   if(!product) return <div className="product-loading"><h2>Product not found</h2><Link href="/">Return to store</Link></div>;
 
@@ -200,7 +172,9 @@ export default function ProductPage(){
         discount=old>price?Math.round((old-price)/old*100):0,
         availableInventory=selectedVariant?Number(selectedVariant.inventory):variants.length?variants.reduce((sum:number,variant:any)=>sum+Number(variant.inventory||0),0):Number(product.inventory),
         gallery=(product.product_images??[]).sort((a:any,b:any)=>a.sort_order-b.sort_order).map((i:any)=>i.image_url).filter(Boolean),
-        images=Array.from(new Set([...(gallery.length?gallery:[product.image_url]),...variants.map((variant:any)=>variant.image_url).filter(Boolean)])) as string[];
+        images=Array.from(new Set([...(gallery.length?gallery:[product.image_url]),...variants.map((variant:any)=>variant.image_url).filter(Boolean)])) as string[],
+        averageRating=reviews.length?Number((reviews.reduce((sum,review)=>sum+Number(review.rating),0)/reviews.length).toFixed(1)):0,
+        ratingDistribution=[5,4,3,2,1].map(stars=>({stars,pct:reviews.length?Math.round(reviews.filter(review=>Number(review.rating)===stars).length/reviews.length*100):0}));
 
   return <div className="product-page">{auth&&<AuthModal reason={authReason} onClose={()=>setAuth(false)}/>} {notice&&<div className="toast">{notice}</div>}
     <header className="product-top"><Link href="/" className="logo"><span>T</span>Taiga<small>MARKET</small></Link><Link href="/"><ArrowLeft/> Continue shopping</Link><Link href="/?panel=cart"><ShoppingCart/> Cart</Link></header>
@@ -249,9 +223,9 @@ export default function ProductPage(){
           
           <div className="detail-rating" style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "16px", fontSize: "13px" }}>
             <span style={{ display: "flex", color: "#fbbe24" }}>
-              {[1,2,3,4,5].map(i=><Star key={i} size={14} fill={i<=Math.round(product.rating)?"currentColor":"none"}/>)}
+              {[1,2,3,4,5].map(i=><Star key={i} size={14} fill={i<=Math.round(averageRating)?"currentColor":"none"}/>)}
             </span>
-            <a href="#reviews" style={{ color: "var(--primary)", fontWeight: "650" }}>{product.rating} · Verified customer reviews</a>
+            <a href="#reviews" style={{ color: "var(--primary)", fontWeight: "650" }}>{reviews.length?`${averageRating} · ${reviews.length} verified customer review${reviews.length===1?"":"s"}`:"No customer ratings yet"}</a>
           </div>
 
           {variants.length>0&&<div className="product-options" aria-label="Product options">{optionNames.map(optionName=>{
@@ -375,11 +349,11 @@ export default function ProductPage(){
         <h2 style={{ gridColumn: "1 / -1", marginBottom: "0" }}>Verified Customer Feedback</h2>
         
         <div className="review-summary" style={{ background: "var(--secondary)", borderRadius: "var(--radius-lg)", padding: "24px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <strong style={{ fontSize: "36px", fontWeight: 900 }}>{product.rating}/5</strong>
+          <strong style={{ fontSize: "36px", fontWeight: 900 }}>{averageRating.toFixed(1)}/5</strong>
           <span style={{ display: "flex", color: "#fbbe24", margin: "8px 0" }}>
-            {[1,2,3,4,5].map(i=><Star key={i} size={14} fill={i<=Math.round(product.rating)?"currentColor":"none"}/>)}
+            {[1,2,3,4,5].map(i=><Star key={i} size={14} fill={i<=Math.round(averageRating)?"currentColor":"none"}/>)}
           </span>
-          <small style={{ fontSize: "11px", color: "var(--muted)" }}>Based on verified purchases</small>
+          <small style={{ fontSize: "11px", color: "var(--muted)" }}>{reviews.length?`Based on ${reviews.length} verified purchase${reviews.length===1?"":"s"}`:"Be the first verified buyer to review"}</small>
  
           {/* Rating Distribution Progress Chart */}
           <div style={{ width: "100%", marginTop: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -397,16 +371,19 @@ export default function ProductPage(){
         </div>
  
         <div className="reviews" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {dynamicReviews.map((rev: any, idx: number) => (
-            <article key={idx} style={{ borderBottom: "1px solid var(--border)", paddingBottom: "16px" }}>
+          {canReview&&<form className="review-form" onSubmit={submitReview}><div><strong>Rate your purchase</strong><span>{[1,2,3,4,5].map(star=><button type="button" key={star} onClick={()=>setReviewRating(star)} aria-label={`${star} star${star===1?"":"s"}`}><Star fill={star<=reviewRating?"currentColor":"none"}/></button>)}</span></div><label>Review title<input name="title" minLength={3} maxLength={100} required placeholder="Summarize your experience"/></label><label>Your review<textarea name="body" minLength={10} maxLength={1200} required placeholder="Tell other customers about the product"/></label><button disabled={reviewBusy}>{reviewBusy?"Publishing…":"Publish verified review"}</button></form>}
+          {!canReview&&<div className="review-eligibility"><ShieldCheck/><span><strong>Reviews are purchase-verified</strong><small>Only customers who completed an order for this product can submit a rating.</small></span></div>}
+          {reviews.length===0&&<div className="review-empty"><Star/><strong>No customer reviews yet</strong><p>Verified ratings will appear here after customers receive and review their purchases.</p></div>}
+          {reviews.map((rev: any) => (
+            <article key={rev.id} style={{ borderBottom: "1px solid var(--border)", paddingBottom: "16px" }}>
               <span style={{ color: "#fbbe24", letterSpacing: "2px" }}>
                 {"★".repeat(rev.rating)}{"☆".repeat(5 - rev.rating)}
               </span>
               <strong style={{ display: "block", fontSize: "13px", fontWeight: 700, margin: "6px 0" }}>{rev.title}</strong>
               <p style={{ fontSize: "13px", color: "var(--muted)", lineHeight: 1.5 }}>{rev.body}</p>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "10px" }}>
-                <small style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--primary)", fontWeight: 700, fontSize: "11px" }}><CheckCircle2 size={12}/> Verified Purchase by {rev.author}</small>
-                <small style={{ fontSize: "11px", color: "var(--muted)" }}>{rev.date}</small>
+                <small style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--primary)", fontWeight: 700, fontSize: "11px" }}><CheckCircle2 size={12}/> Verified Purchase by {rev.reviewer_name}</small>
+                <small style={{ fontSize: "11px", color: "var(--muted)" }}>{new Date(rev.created_at).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"})}</small>
               </div>
             </article>
           ))}

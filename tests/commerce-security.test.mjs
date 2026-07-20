@@ -4,6 +4,7 @@ import test from "node:test";
 
 const migration=await readFile(new URL("../supabase/migrations/202607150001_secure_commerce.sql",import.meta.url),"utf8");
 const variantMigration=await readFile(new URL("../supabase/migrations/202607200001_product_variants.sql",import.meta.url),"utf8");
+const reviewMigration=await readFile(new URL("../supabase/migrations/202607200002_verified_customer_reviews.sql",import.meta.url),"utf8");
 const initializeRoute=await readFile(new URL("../app/api/paystack/initialize/route.ts",import.meta.url),"utf8");
 const verifyRoute=await readFile(new URL("../app/api/paystack/verify/route.ts",import.meta.url),"utf8");
 
@@ -44,4 +45,12 @@ test("checkout prices and deducts the exact selected variant",()=>{
   assert.match(variantMigration,/item->>'id'=c\.variant_key/i);
   assert.match(variantMigration,/jsonb_set\(value,'\{inventory\}'/i);
   assert.match(variantMigration,/A selected product variant is unavailable or out of stock/i);
+});
+
+test("ratings are calculated only from verified customer reviews",()=>{
+  assert.match(reviewMigration,/create table if not exists public\.product_reviews/i);
+  assert.match(reviewMigration,/o\.paid_at is not null and o\.status<>'cancelled'/i);
+  assert.match(reviewMigration,/unique\(product_id,user_id\)/i);
+  assert.match(reviewMigration,/round\(avg\(rating\)::numeric,1\)/i);
+  assert.match(reviewMigration,/Product administration cannot set customer ratings/i);
 });
