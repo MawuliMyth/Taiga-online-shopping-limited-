@@ -4620,6 +4620,7 @@ footer {
 /* Taiga admin system — layout and component hierarchy adapted from the supplied guide. */
 .dashboard-shell{background:#f4f7f5!important;font-family:var(--font-body),system-ui,sans-serif}
 .dashboard-shell .sidebar{background:var(--card-bg);color:var(--foreground);padding:20px 12px;border-right:1px solid var(--border);box-shadow:none}
+.dashboard-shell .sidebar{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--primary) 45%,transparent) transparent;overscroll-behavior:contain}.dashboard-shell .sidebar::-webkit-scrollbar{width:6px}.dashboard-shell .sidebar::-webkit-scrollbar-track{background:transparent}.dashboard-shell .sidebar::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--primary) 40%,transparent);border-radius:999px}.dashboard-shell .sidebar::-webkit-scrollbar-thumb:hover{background:var(--primary)}
 .dashboard-shell .sidebar .logo{color:var(--foreground);margin:0}.dashboard-shell .sidebar .logo>span{width:42px;height:42px;border:1px solid var(--border);background:var(--primary-light);color:var(--primary)}
 .dashboard-shell .side-label{margin:18px 12px 8px;color:var(--muted);font-size:10px;font-weight:850;letter-spacing:.11em}
 .dashboard-shell .side-nav button,.dashboard-shell .side-nav a{min-height:42px;color:var(--muted);font-size:13px;font-weight:700;border-radius:8px}

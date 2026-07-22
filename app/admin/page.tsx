@@ -341,7 +341,7 @@ export default function Admin(){
   </main>;
   
   return <div className="dashboard-shell" style={{ display: "grid", gridTemplateColumns: "278px 1fr" }}>{notice&&<div className="toast">{notice}</div>}
-    <aside className="sidebar" style={{ width: "100%", height: "100vh", position: "sticky", top: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <aside className="sidebar" style={{ width: "100%", height: "100vh", position: "sticky", top: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", padding: "16px 20px" }}>
         <Link href="/" className="logo"><span>T</span>Taiga<small>ADMIN</small></Link>
       </div>
