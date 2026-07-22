@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { 
   BarChart3, Bell, Boxes, ChevronDown, CircleDollarSign, ImagePlus, 
-  LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings, 
+  LayoutDashboard, LogOut, Package, Plus, Search, Settings, 
   ShoppingCart, Store, Tags, Trash2, Truck, Users, Wallet, X, 
   TrendingUp, ArrowUpRight, ArrowDownRight, Edit3, ClipboardCheck,
   ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck
@@ -30,7 +30,6 @@ export default function Admin(){
   const [tab,setTab]=useState<Tab>("Dashboard"),
         [access,setAccess]=useState<"checking"|"guest"|"denied"|"allowed"|"setup">("checking"),
         [auth,setAuth]=useState(false),
-        [mobile,setMobile]=useState(false),
         [adminUser,setAdminUser]=useState({name:"Administrator",email:""});
   
   const [products,setProducts]=useState<any[]>([]),
@@ -63,9 +62,6 @@ export default function Admin(){
     flash_sale_title:"Flash Sales",
     flash_sale_ends_at:""
   });
-
-  // Collapsible sidebar state
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Quick order viewer state
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
@@ -344,48 +340,26 @@ export default function Admin(){
     <style>{`@media(max-width:850px){main{grid-template-columns:1fr!important}main>section:first-of-type{min-height:360px;padding:32px 24px!important}main>section:first-of-type h1{font-size:42px!important}main>section:last-of-type{padding:28px 16px!important}}`}</style>
   </main>;
   
-  return <div className="dashboard-shell" style={{ display: "grid", gridTemplateColumns: sidebarCollapsed ? "76px 1fr" : "278px 1fr", transition: "grid-template-columns 0.3s ease" }}>{notice&&<div className="toast">{notice}</div>}
-    {mobile&&<button className="sidebar-scrim" aria-label="Close navigation" onClick={()=>setMobile(false)}/>}
-    
-    <aside className={`sidebar ${mobile?"mobile-open":""} ${sidebarCollapsed ? "collapsed-mode" : ""}`} style={{ width: "100%", height: "100vh", position: "sticky", top: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-      <button className="close-side" aria-label="Close navigation" onClick={()=>setMobile(false)}><X/></button>
-      
-      <div style={{ display: "flex", alignItems: "center", justifyContent: sidebarCollapsed ? "center" : "space-between", padding: "16px 20px" }}>
-        <Link href="/" className="logo"><span>T</span>{!sidebarCollapsed && "Taiga"}{!sidebarCollapsed && <small>ADMIN</small>}</Link>
-        {!mobile && (
-          <button 
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            style={{ 
-              background: "none", 
-              border: "none", 
-              cursor: "pointer", 
-              color: "var(--muted)",
-              display: "grid",
-              placeItems: "center"
-            }}
-          >
-            <Menu size={16} />
-          </button>
-        )}
+  return <div className="dashboard-shell" style={{ display: "grid", gridTemplateColumns: "278px 1fr" }}>{notice&&<div className="toast">{notice}</div>}
+    <aside className="sidebar" style={{ width: "100%", height: "100vh", position: "sticky", top: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "16px 20px" }}>
+        <Link href="/" className="logo"><span>T</span>Taiga<small>ADMIN</small></Link>
       </div>
 
-      <p className="side-label" style={{ paddingLeft: sidebarCollapsed ? "0" : "20px", textAlign: sidebarCollapsed ? "center" : "left" }}>
-        {sidebarCollapsed ? "•••" : "Store management"}
-      </p>
+      <p className="side-label" style={{ paddingLeft: "20px" }}>Store management</p>
       
       <nav className="side-nav" aria-label="Admin sections" style={{ flex: 1, padding: "0 10px" }}>
-        {navigation.map(([name,Icon])=><button key={name} onClick={()=>{setTab(name);setMobile(false)}} className={tab===name?"active":""} style={{ display: "flex", alignItems: "center", justifyContent: sidebarCollapsed ? "center" : "flex-start", gap: "12px", width: "100%", padding: "10px 14px", borderRadius: "var(--radius-md)", marginBottom: "4px" }} title={name}><Icon size={17}/>{!sidebarCollapsed && <span>{name}</span>}{name==="Orders" && !sidebarCollapsed && <i style={{ marginLeft: "auto" }}>{orders.length}</i>}</button>)}
+        {navigation.map(([name,Icon])=><button key={name} onClick={()=>setTab(name)} className={tab===name?"active":""} style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "12px", width: "100%", padding: "10px 14px", borderRadius: "var(--radius-md)", marginBottom: "4px" }} title={name}><Icon size={17}/><span>{name}</span>{name==="Orders"&&<i style={{ marginLeft: "auto" }}>{orders.length}</i>}</button>)}
       </nav>
       
       <nav className="side-nav sidebar-bottom" style={{ padding: "10px" }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", justifyContent: sidebarCollapsed ? "center" : "flex-start", gap: "12px", padding: "10px 14px", width: "100%" }}><Store/>{!sidebarCollapsed && <span>View store</span>}</Link>
-        <button onClick={()=>supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", justifyContent: sidebarCollapsed ? "center" : "flex-start", gap: "12px", padding: "10px 14px", width: "100%", background: "none", border: "none" }}><LogOut/>{!sidebarCollapsed && <span>Sign out</span>}</button>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", width: "100%" }}><Store/><span>View store</span></Link>
+        <button onClick={()=>supabase.auth.signOut()} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", width: "100%", background: "none", border: "none" }}><LogOut/><span>Sign out</span></button>
       </nav>
     </aside>
 
     <main className="dash-main">
       <header className="dash-topbar">
-        <button className="dashboard-mobile" aria-label="Open navigation" onClick={()=>setMobile(true)}><Menu/></button>
         <div className="dash-search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tab==="Products"?"Search products...":"Search this admin section..."} aria-label={`Search ${tab}`}/><kbd>Enter</kbd></div>
         <div className="topbar-tools"><button aria-label="Notifications" title="Notifications"><Bell size={18}/></button><button aria-label="Store settings" title="Store settings" onClick={()=>setTab("Settings")}><Settings size={18}/></button></div>
         
