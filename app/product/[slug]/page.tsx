@@ -261,7 +261,7 @@ export default function ProductPage(){
           {[
             { id: "details", label: "Product Details" },
             { id: "specs", label: "Specifications" },
-            { id: "warranty", label: "Warranty & Shipping" }
+            { id: "warranty", label: "Warranty & Returns" }
           ].map(tab => (
             <button 
               key={tab.id}
@@ -293,13 +293,8 @@ export default function ProductPage(){
           {activeTab === "specs" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
-                <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><Award size={14} /> Key Features</h3>
-                <ul style={{ listStyleType: "disc", paddingLeft: "16px", display: "grid", gap: "8px", fontSize: "12px", color: "var(--muted)" }}>
-                  <li>Genuine product with quality assurance and barcode verification.</li>
-                  <li>Official Taiga Online Shopping Limited warranty certificate included.</li>
-                  <li>Nationwide tracking enabled door-to-door delivery.</li>
-                  <li>7-day warranty from the date of purchase.</li>
-                </ul>
+                <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><Award size={14} /> Product specifications</h3>
+                {Object.keys(product.specifications||{}).length?<dl className="product-spec-list">{Object.entries(product.specifications).map(([name,value])=><div key={name}><dt>{name}</dt><dd>{String(value)}</dd></div>)}</dl>:<p style={{fontSize:12,color:"var(--muted)"}}>No additional specifications have been published for this product.</p>}
               </article>
               
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
@@ -308,7 +303,7 @@ export default function ProductPage(){
                   <p><b>SKU:</b> {String(product.id).slice(0,12).toUpperCase()}</p>
                   <p><b>Category:</b> {product.categories?.name}</p>
                   <p><b>Stock availability:</b> {product.inventory} units available</p>
-                  <p><b>Retail type:</b> Official Brand Store</p>
+                  <p><b>Variants:</b> {variants.length?`${variants.length} available combinations`:"Standard product"}</p>
                 </div>
               </article>
             </div>
@@ -318,16 +313,13 @@ export default function ProductPage(){
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
                 <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><ShieldCheck size={14} /> Warranty Terms</h3>
-                <p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>
-                  This product comes with a 7-day warranty from the date of purchase. The warranty covers manufacturing defects and structural failures. Wear and tear, water damage, and accidental damage are not covered.
-                </p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>{Number(product.warranty_value)>0?`This product includes a ${product.warranty_value}-${String(product.warranty_unit||"months").replace(/s$/,'')} warranty from the purchase date.`:"No seller warranty is provided for this product."}</p>
+                {product.warranty_notes&&<p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5", marginTop:10 }}>{product.warranty_notes}</p>}
               </article>
 
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
-                <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><Truck size={14} /> Shipping Policy</h3>
-                <p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>
-                  Standard shipping: 2-5 business days across Nigeria. Free standard delivery applies to orders ₦50,000 and above. Orders are fully tracked, and updates are sent via SMS/Email.
-                </p>
+                <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><Truck size={14} /> Return eligibility</h3>
+                <p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>{product.returnable!==false?"This product is eligible for return within 7 days of delivery. It must be unused, complete and in its original packaging.":"This product is not returnable. Any applicable seller warranty shown alongside still remains valid."}</p>
               </article>
             </div>
           )}
@@ -338,7 +330,7 @@ export default function ProductPage(){
         <h2>Customers who viewed this also viewed</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px" }}>
           {related.map(r=><Link href={`/product/${r.slug}`} key={r.id} style={{ display: "flex", flexDirection: "column", gap: "8px" }} className="related-card">
-            <img src={r.image_url} alt="" style={{ width: "100%", height: "140px", objectFit: "cover", borderRadius: "var(--radius-md)", background: "var(--secondary)" }} />
+            <img src={r.image_url} alt="" style={{ width: "100%", height: "140px", objectFit: "contain", padding:"10px", borderRadius: "var(--radius-md)", background: "white" }} />
             <strong style={{ fontSize: "13px", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</strong>
             <span style={{ fontSize: "13px", fontWeight: "800", color: "var(--primary)" }}>{money(Number(r.price))}</span>
           </Link>)}

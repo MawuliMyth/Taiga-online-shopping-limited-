@@ -5,6 +5,7 @@ import test from "node:test";
 const migration=await readFile(new URL("../supabase/migrations/202607150001_secure_commerce.sql",import.meta.url),"utf8");
 const variantMigration=await readFile(new URL("../supabase/migrations/202607200001_product_variants.sql",import.meta.url),"utf8");
 const reviewMigration=await readFile(new URL("../supabase/migrations/202607200002_verified_customer_reviews.sql",import.meta.url),"utf8");
+const merchandisingMigration=await readFile(new URL("../supabase/migrations/202607220001_product_merchandising.sql",import.meta.url),"utf8");
 const initializeRoute=await readFile(new URL("../app/api/paystack/initialize/route.ts",import.meta.url),"utf8");
 const verifyRoute=await readFile(new URL("../app/api/paystack/verify/route.ts",import.meta.url),"utf8");
 
@@ -53,4 +54,12 @@ test("ratings are calculated only from verified customer reviews",()=>{
   assert.match(reviewMigration,/unique\(product_id,user_id\)/i);
   assert.match(reviewMigration,/round\(avg\(rating\)::numeric,1\)/i);
   assert.match(reviewMigration,/Product administration cannot set customer ratings/i);
+});
+
+test("product policies and merchandising are admin managed",()=>{
+  assert.match(merchandisingMigration,/specifications jsonb/i);
+  assert.match(merchandisingMigration,/warranty_value integer/i);
+  assert.match(merchandisingMigration,/returnable boolean/i);
+  assert.match(merchandisingMigration,/sales_count integer/i);
+  assert.match(merchandisingMigration,/increment_product_sales_after_order/i);
 });

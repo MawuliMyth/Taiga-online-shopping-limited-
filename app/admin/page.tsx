@@ -24,7 +24,7 @@ const navigation:[Tab,any][]=[
   ["Audit Logs", ClipboardCheck],
   ["Settings", Settings]
 ];
-const emptyProduct={name:"",slug:"",description:"",price:"",compare_at_price:"",image_url:"",badge:"New",inventory:"0",category_id:"",is_active:true,variants:"[]"};
+const emptyProduct={name:"",slug:"",description:"",price:"",compare_at_price:"",image_url:"",badge:"New",inventory:"0",category_id:"",is_active:true,variants:"[]",specifications:"{}",warranty_value:"0",warranty_unit:"months",warranty_notes:"",returnable:true};
 
 export default function Admin(){
   const [tab,setTab]=useState<Tab>("Dashboard"),
@@ -151,6 +151,7 @@ export default function Admin(){
     payload.compare_at_price=payload.compare_at_price?Number(payload.compare_at_price):null;
     payload.inventory=Number(payload.inventory);
     try{payload.variants=JSON.parse(String(payload.variants||"[]"))}catch{return flash("Product variants could not be read. Remove the invalid row and try again.")}
+    try{payload.specifications=JSON.parse(String(payload.specifications||"{}"))}catch{return flash("Product specifications could not be read. Remove the invalid row and try again.")}
     if(!Array.isArray(payload.variants)) return flash("Product variants must be a list.");
     for(const variant of payload.variants){
       if(!variant.id||!variant.options||!Object.keys(variant.options).length) return flash("Each variant needs at least one option, such as Size, Colour or Storage.");
@@ -159,6 +160,9 @@ export default function Admin(){
       variant.inventory=Number(variant.inventory);variant.price=variant.price===""||variant.price===null?null:Number(variant.price);
     }
     if(payload.variants.length) payload.inventory=payload.variants.reduce((sum:number,variant:any)=>sum+variant.inventory,0);
+    payload.warranty_value=Number(payload.warranty_value||0);
+    if(!Number.isInteger(payload.warranty_value)||payload.warranty_value<0||payload.warranty_value>120)return flash("Warranty duration must be a whole number from 0 to 120.");
+    payload.returnable=f.get("returnable")==="yes";
     if(!Number.isFinite(payload.price)||payload.price<=0) return flash("Enter a valid product price greater than zero.");
     if(payload.compare_at_price!==null&&payload.compare_at_price<payload.price) return flash("Compare price cannot be lower than the selling price.");
     if(!Number.isInteger(payload.inventory)||payload.inventory<0) return flash("Inventory must be a whole number of zero or more.");
@@ -177,6 +181,8 @@ export default function Admin(){
   }
 
   async function uploadImage(file:File,setUrl:(url:string)=>void){
+    if(!["image/jpeg","image/png","image/webp"].includes(file.type))return flash("Upload a JPG, PNG or WebP image.");
+    if(file.size>8*1024*1024)return flash("Images must be 8 MB or smaller.");
     const path=`${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi,"-")}`;
     const {error}=await supabase.storage.from("product-images").upload(path,file);
     if(error) return flash(error.message);
@@ -991,8 +997,11 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
 function ProductEditor({item,categories,close,submit,upload}:{item:any;categories:any[];close:()=>void;submit:(e:React.FormEvent<HTMLFormElement>)=>void;upload:(f:File,set:(u:string)=>void)=>void}){
   const [gallery,setGallery]=useState<string[]>(item.product_images?.sort((a:any,b:any)=>a.sort_order-b.sort_order).map((i:any)=>i.image_url)??(item.image_url?[item.image_url]:[]));
   const [variants,setVariants]=useState<any[]>(Array.isArray(item.variants)?item.variants:[]);
+  const [specifications,setSpecifications]=useState<{name:string;value:string}[]>(Object.entries(item.specifications||{}).map(([name,value])=>({name,value:String(value)})));
   const addVariant=()=>setVariants(current=>[...current,{id:crypto.randomUUID(),options:{Size:"",Colour:"",Storage:""},sku:"",price:"",inventory:0,image_url:""}]);
+  const makeVariants=(type:"fashion"|"phone")=>{const rows=type==="fashion"?["S","M","L","XL"].flatMap(Size=>["Black","White"].map(Colour=>({Size,Colour}))):["128 GB","256 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({Storage,Colour})));setVariants(rows.map((options,index)=>({id:crypto.randomUUID(),options,sku:`${type==="fashion"?"FAS":"PHN"}-${String(index+1).padStart(2,"0")}`,price:"",inventory:0,image_url:""}))) };
   const updateVariant=(index:number,key:string,value:any)=>setVariants(current=>current.map((variant,i)=>i===index?key.startsWith("option.")?{...variant,options:{...variant.options,[key.slice(7)]:value}}:{...variant,[key]:value}:variant));
+  const uploadVariantImage=(index:number,file?:File)=>{if(file)upload(file,url=>updateVariant(index,"image_url",url))};
   const uploadMany=async(files:FileList|null)=>{
     if(!files) return;
     const added:string[]=[];
@@ -1006,6 +1015,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
     <form className="product-editor animate-scale-up" onSubmit={submit}>
       <input type="hidden" name="gallery_urls" value={JSON.stringify(gallery)}/>
       <input type="hidden" name="variants" value={JSON.stringify(variants.map(variant=>({...variant,options:Object.fromEntries(Object.entries(variant.options||{}).filter(([,value])=>String(value).trim()))})))}/>
+      <input type="hidden" name="specifications" value={JSON.stringify(Object.fromEntries(specifications.filter(spec=>spec.name.trim()&&spec.value.trim()).map(spec=>[spec.name.trim(),spec.value.trim()])))}/>
       <header>
         <h2>{item.id?"Edit product":"Add product"}</h2>
         <button type="button" onClick={close}><X/></button>
@@ -1042,6 +1052,14 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
         <label className="full">Description
           <textarea name="description" defaultValue={item.description} minLength={10} maxLength={3000}/>
         </label>
+        <section className="full product-policy-editor">
+          <div className="policy-heading"><div><strong>Specifications</strong><small>Add factual details that apply to this product.</small></div><button type="button" onClick={()=>setSpecifications(current=>[...current,{name:"",value:""}])}>+ Add specification</button></div>
+          {specifications.length===0?<div className="variant-empty">No specifications added yet.</div>:<div className="specification-rows">{specifications.map((spec,index)=><div key={index}><input value={spec.name} onChange={e=>setSpecifications(current=>current.map((row,i)=>i===index?{...row,name:e.target.value}:row))} placeholder="e.g. Material"/><input value={spec.value} onChange={e=>setSpecifications(current=>current.map((row,i)=>i===index?{...row,value:e.target.value}:row))} placeholder="e.g. 100% cotton"/><button type="button" onClick={()=>setSpecifications(current=>current.filter((_,i)=>i!==index))}><X/></button></div>)}</div>}
+        </section>
+        <section className="full product-policy-editor">
+          <div className="policy-heading"><div><strong>Warranty & returns</strong><small>These terms appear clearly on the product page.</small></div></div>
+          <div className="policy-grid"><label>Warranty duration<input name="warranty_value" type="number" min="0" max="120" step="1" defaultValue={item.warranty_value??0}/></label><label>Warranty period<select name="warranty_unit" defaultValue={item.warranty_unit||"months"}><option value="days">Days</option><option value="months">Months</option><option value="years">Years</option></select></label><label className="full">Warranty coverage<textarea name="warranty_notes" maxLength={1000} defaultValue={item.warranty_notes||""} placeholder="Coverage, exclusions and how customers make a claim"/></label><fieldset className="return-choice"><legend>Can this product be returned?</legend><label><input type="radio" name="returnable" value="yes" defaultChecked={item.returnable!==false}/><span><b>Yes — 7-day return</b><small>Eligible within 7 days of delivery</small></span></label><label><input type="radio" name="returnable" value="no" defaultChecked={item.returnable===false}/><span><b>No returns</b><small>Final-sale product; warranty may still apply</small></span></label></fieldset></div>
+        </section>
         <label className="full image-upload">Primary image URL
           <input name="image_url" type="url" value={gallery[0]??""} onChange={e=>setGallery(current=>[e.target.value,...current.slice(1)])} placeholder="https://example.com/product.jpg" required/>
           <span><ImagePlus/> Upload multiple images<input type="file" accept="image/*" multiple onChange={e=>uploadMany(e.target.files)}/></span>
@@ -1056,10 +1074,11 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
           </div>
         </label>
         <section className="full variant-editor">
-          <div className="variant-editor-heading"><div><strong>Product variants</strong><small>Add combinations only when choices such as size, colour or storage apply.</small></div><button type="button" onClick={addVariant}>+ Add combination</button></div>
+          <div className="variant-editor-heading"><div><strong>Variants & inventory</strong><small>Manage every sellable combination with its own image, SKU, price and stock.</small></div><button type="button" onClick={addVariant}>+ Custom combination</button></div>
+          <div className="variant-presets"><span>Quick setup</span><button type="button" onClick={()=>makeVariants("fashion")}>Clothing · Size + Colour</button><button type="button" onClick={()=>makeVariants("phone")}>Phone · Colour + Storage</button>{variants.length>0&&<button className="clear" type="button" onClick={()=>setVariants([])}>Clear</button>}</div>
           {variants.length===0?<div className="variant-empty">No variants — customers will add this product directly.</div>:<div className="variant-list">{variants.map((variant,index)=><article key={variant.id}>
-            <div className="variant-row-title"><b>Combination {index+1}</b><button type="button" onClick={()=>setVariants(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
-            <div className="variant-fields">
+            <div className="variant-row-title"><div className="variant-image-cell">{variant.image_url?<img src={variant.image_url} alt=""/>:<ImagePlus/>}<label>Upload<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>uploadVariantImage(index,e.target.files?.[0])}/></label></div><div><b>{Object.values(variant.options||{}).filter(Boolean).join(" / ")||`Combination ${index+1}`}</b><small>Variant {index+1}</small></div><button type="button" onClick={()=>setVariants(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
+            <div className="variant-fields variant-combination-grid">
               <label>Size<input value={variant.options?.Size||""} onChange={e=>updateVariant(index,"option.Size",e.target.value)} placeholder="e.g. M"/></label>
               <label>Colour<input value={variant.options?.Colour||""} onChange={e=>updateVariant(index,"option.Colour",e.target.value)} placeholder="e.g. Black"/></label>
               <label>Storage<input value={variant.options?.Storage||""} onChange={e=>updateVariant(index,"option.Storage",e.target.value)} placeholder="e.g. 128 GB"/></label>
@@ -1067,7 +1086,6 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
               <label>SKU<input value={variant.sku||""} onChange={e=>updateVariant(index,"sku",e.target.value)} placeholder="TAI-BLK-128"/></label>
               <label>Price override<input type="number" min="0.01" step=".01" value={variant.price??""} onChange={e=>updateVariant(index,"price",e.target.value)} placeholder="Use base price"/></label>
               <label>Stock<input type="number" min="0" step="1" value={variant.inventory??0} onChange={e=>updateVariant(index,"inventory",e.target.value)} required/></label>
-              <label>Image URL<input type="url" value={variant.image_url||""} onChange={e=>updateVariant(index,"image_url",e.target.value)} placeholder="Optional variant image"/></label>
             </div>
           </article>)}</div>}
         </section>
