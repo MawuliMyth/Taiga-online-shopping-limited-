@@ -153,8 +153,14 @@ export default function Admin(){
     try{payload.variants=JSON.parse(String(payload.variants||"[]"))}catch{return flash("Product variants could not be read. Remove the invalid row and try again.")}
     try{payload.specifications=JSON.parse(String(payload.specifications||"{}"))}catch{return flash("Product specifications could not be read. Remove the invalid row and try again.")}
     if(!Array.isArray(payload.variants)) return flash("Product variants must be a list.");
+    const variantSignatures=new Set<string>();
     for(const variant of payload.variants){
       if(!variant.id||!variant.options||!Object.keys(variant.options).length) return flash("Each variant needs at least one option, such as Size, Colour or Storage.");
+      variant.options=Object.fromEntries(Object.entries(variant.options).map(([name,value])=>[String(name).trim(),String(value).trim()]).filter(([name,value])=>name&&value));
+      if(!Object.keys(variant.options).length)return flash("Enter a value for every option in each variant combination.");
+      const signature=Object.entries(variant.options).sort(([a],[b])=>a.localeCompare(b)).map(([name,value])=>`${name.toLowerCase()}:${String(value).toLowerCase()}`).join("|");
+      if(variantSignatures.has(signature))return flash("Each variant combination must be unique.");
+      variantSignatures.add(signature);
       if(!Number.isInteger(Number(variant.inventory))||Number(variant.inventory)<0) return flash("Every variant inventory must be a whole number of zero or more.");
       if(variant.price!==null&&variant.price!==""&&(!Number.isFinite(Number(variant.price))||Number(variant.price)<=0)) return flash("Every variant price must be greater than zero or left blank.");
       variant.inventory=Number(variant.inventory);variant.price=variant.price===""||variant.price===null?null:Number(variant.price);
@@ -997,9 +1003,37 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
 function ProductEditor({item,categories,close,submit,upload}:{item:any;categories:any[];close:()=>void;submit:(e:React.FormEvent<HTMLFormElement>)=>void;upload:(f:File,set:(u:string)=>void)=>void}){
   const [gallery,setGallery]=useState<string[]>(item.product_images?.sort((a:any,b:any)=>a.sort_order-b.sort_order).map((i:any)=>i.image_url)??(item.image_url?[item.image_url]:[]));
   const [variants,setVariants]=useState<any[]>(Array.isArray(item.variants)?item.variants:[]);
+  const [variantAttributes,setVariantAttributes]=useState<string[]>(()=>Array.from(new Set((Array.isArray(item.variants)?item.variants:[]).flatMap((variant:any)=>Object.keys(variant.options||{})))) as string[]);
+  const [newAttribute,setNewAttribute]=useState("");
   const [specifications,setSpecifications]=useState<{name:string;value:string}[]>(Object.entries(item.specifications||{}).map(([name,value])=>({name,value:String(value)})));
-  const addVariant=()=>setVariants(current=>[...current,{id:crypto.randomUUID(),options:{Size:"",Colour:"",Storage:""},sku:"",price:"",inventory:0,image_url:""}]);
-  const makeVariants=(type:"fashion"|"phone")=>{const rows=type==="fashion"?["S","M","L","XL"].flatMap(Size=>["Black","White"].map(Colour=>({Size,Colour}))):["128 GB","256 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({Storage,Colour})));setVariants(rows.map((options,index)=>({id:crypto.randomUUID(),options,sku:`${type==="fashion"?"FAS":"PHN"}-${String(index+1).padStart(2,"0")}`,price:"",inventory:0,image_url:""}))) };
+  const addVariant=()=>setVariants(current=>[...current,{id:crypto.randomUUID(),options:Object.fromEntries(variantAttributes.map(name=>[name,""])),sku:"",price:"",inventory:0,image_url:""}]);
+  const setPreset=(type:"fashion"|"shoes"|"phone"|"watch")=>{
+    const presets={
+      fashion:{attributes:["Size","Colour"],rows:["S","M","L","XL"].flatMap(Size=>["Black","White"].map(Colour=>({Size,Colour}))),prefix:"FAS"},
+      shoes:{attributes:["Shoe Size","Colour"],rows:["39","40","41","42","43","44"].flatMap(size=>["Black","Brown"].map(Colour=>({"Shoe Size":size,Colour}))),prefix:"SHO"},
+      phone:{attributes:["Colour","Storage"],rows:["128 GB","256 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({Storage,Colour}))),prefix:"PHN"},
+      watch:{attributes:["Case Size","Strap Material","Colour"],rows:["40 mm","44 mm"].flatMap(size=>["Silicone","Leather"].map(material=>({"Case Size":size,"Strap Material":material,Colour:"Black"}))),prefix:"WAT"}
+    },preset=presets[type];
+    setVariantAttributes(preset.attributes);
+    setVariants(preset.rows.map((options,index)=>({id:crypto.randomUUID(),options,sku:`${preset.prefix}-${String(index+1).padStart(2,"0")}`,price:"",inventory:0,image_url:""})));
+  };
+  const addAttribute=()=>{
+    const name=newAttribute.trim().replace(/\s+/g," ");
+    if(!name||variantAttributes.some(attribute=>attribute.toLowerCase()===name.toLowerCase()))return;
+    setVariantAttributes(current=>[...current,name]);
+    setVariants(current=>current.map(variant=>({...variant,options:{...variant.options,[name]:""}})));
+    setNewAttribute("");
+  };
+  const renameAttribute=(oldName:string,nextValue:string)=>{
+    const nextName=nextValue.trim().replace(/\s+/g," ");
+    if(!nextName||nextName===oldName||variantAttributes.some(name=>name!==oldName&&name.toLowerCase()===nextName.toLowerCase()))return;
+    setVariantAttributes(current=>current.map(name=>name===oldName?nextName:name));
+    setVariants(current=>current.map(variant=>{const options={...variant.options};options[nextName]=options[oldName]??"";delete options[oldName];return {...variant,options}}));
+  };
+  const removeAttribute=(name:string)=>{
+    setVariantAttributes(current=>current.filter(attribute=>attribute!==name));
+    setVariants(current=>current.map(variant=>{const options={...variant.options};delete options[name];return {...variant,options}}));
+  };
   const updateVariant=(index:number,key:string,value:any)=>setVariants(current=>current.map((variant,i)=>i===index?key.startsWith("option.")?{...variant,options:{...variant.options,[key.slice(7)]:value}}:{...variant,[key]:value}:variant));
   const uploadVariantImage=(index:number,file?:File)=>{if(file)upload(file,url=>updateVariant(index,"image_url",url))};
   const uploadMany=async(files:FileList|null)=>{
@@ -1075,15 +1109,17 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
           </div>
         </section>
         <section className="full variant-editor">
-          <div className="variant-editor-heading"><div><strong>Variants & inventory</strong><small>Manage every sellable combination with its own image, SKU, price and stock.</small></div><button type="button" onClick={addVariant}>+ Custom combination</button></div>
-          <div className="variant-presets"><span>Quick setup</span><button type="button" onClick={()=>makeVariants("fashion")}>Clothing · Size + Colour</button><button type="button" onClick={()=>makeVariants("phone")}>Phone · Colour + Storage</button>{variants.length>0&&<button className="clear" type="button" onClick={()=>setVariants([])}>Clear</button>}</div>
+          <div className="variant-editor-heading"><div><strong>Variants & inventory</strong><small>Create option types for any product, then manage every sellable combination.</small></div><button type="button" onClick={addVariant} disabled={!variantAttributes.length}>+ Add combination</button></div>
+          <div className="variant-presets"><span>Quick setup</span><button type="button" onClick={()=>setPreset("fashion")}>Clothing</button><button type="button" onClick={()=>setPreset("shoes")}>Shoes</button><button type="button" onClick={()=>setPreset("phone")}>Phones</button><button type="button" onClick={()=>setPreset("watch")}>Watches</button>{(variants.length>0||variantAttributes.length>0)&&<button className="clear" type="button" onClick={()=>{setVariants([]);setVariantAttributes([])}}>Clear</button>}</div>
+          <div className="variant-attribute-builder">
+            <div><strong>Option types</strong><small>Examples: Shoe Size, Case Size, Strap Material, Capacity, Voltage, Scent or Shade.</small></div>
+            <div className="variant-attribute-add"><input value={newAttribute} onChange={e=>setNewAttribute(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addAttribute()}}} maxLength={40} placeholder="Enter an option type"/><button type="button" onClick={addAttribute}>Add option</button></div>
+            {variantAttributes.length>0&&<div className="variant-attribute-chips">{variantAttributes.map(attribute=><div key={attribute}><input defaultValue={attribute} aria-label={`Rename ${attribute}`} onBlur={e=>renameAttribute(attribute,e.target.value)}/><button type="button" aria-label={`Remove ${attribute}`} onClick={()=>removeAttribute(attribute)}><X/></button></div>)}</div>}
+          </div>
           {variants.length===0?<div className="variant-empty">No variants — customers will add this product directly.</div>:<div className="variant-list">{variants.map((variant,index)=><article key={variant.id}>
             <div className="variant-row-title"><div className="variant-image-cell">{variant.image_url?<img src={variant.image_url} alt=""/>:<ImagePlus/>}<label>Upload<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>uploadVariantImage(index,e.target.files?.[0])}/></label></div><div><b>{Object.values(variant.options||{}).filter(Boolean).join(" / ")||`Combination ${index+1}`}</b><small>Variant {index+1}</small></div><button type="button" onClick={()=>setVariants(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
             <div className="variant-fields variant-combination-grid">
-              <label>Size<input value={variant.options?.Size||""} onChange={e=>updateVariant(index,"option.Size",e.target.value)} placeholder="e.g. M"/></label>
-              <label>Colour<input value={variant.options?.Colour||""} onChange={e=>updateVariant(index,"option.Colour",e.target.value)} placeholder="e.g. Black"/></label>
-              <label>Storage<input value={variant.options?.Storage||""} onChange={e=>updateVariant(index,"option.Storage",e.target.value)} placeholder="e.g. 128 GB"/></label>
-              <label>Style / Model<input value={variant.options?.Style||""} onChange={e=>updateVariant(index,"option.Style",e.target.value)} placeholder="Optional"/></label>
+              {variantAttributes.map(attribute=><label key={attribute}>{attribute}<input value={variant.options?.[attribute]||""} onChange={e=>updateVariant(index,`option.${attribute}`,e.target.value)} placeholder={`Enter ${attribute.toLowerCase()}`} required/></label>)}
               <label>SKU<input value={variant.sku||""} onChange={e=>updateVariant(index,"sku",e.target.value)} placeholder="TAI-BLK-128"/></label>
               <label>Price override<input type="number" min="0.01" step=".01" value={variant.price??""} onChange={e=>updateVariant(index,"price",e.target.value)} placeholder="Use base price"/></label>
               <label>Stock<input type="number" min="0" step="1" value={variant.inventory??0} onChange={e=>updateVariant(index,"inventory",e.target.value)} required/></label>
