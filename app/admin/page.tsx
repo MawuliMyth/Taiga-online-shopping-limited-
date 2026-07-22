@@ -1060,19 +1060,20 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
           <div className="policy-heading"><div><strong>Warranty & returns</strong><small>These terms appear clearly on the product page.</small></div></div>
           <div className="policy-grid"><label>Warranty duration<input name="warranty_value" type="number" min="0" max="120" step="1" defaultValue={item.warranty_value??0}/></label><label>Warranty period<select name="warranty_unit" defaultValue={item.warranty_unit||"months"}><option value="days">Days</option><option value="months">Months</option><option value="years">Years</option></select></label><label className="full">Warranty coverage<textarea name="warranty_notes" maxLength={1000} defaultValue={item.warranty_notes||""} placeholder="Coverage, exclusions and how customers make a claim"/></label><fieldset className="return-choice"><legend>Can this product be returned?</legend><label><input type="radio" name="returnable" value="yes" defaultChecked={item.returnable!==false}/><span><b>Yes — 7-day return</b><small>Eligible within 7 days of delivery</small></span></label><label><input type="radio" name="returnable" value="no" defaultChecked={item.returnable===false}/><span><b>No returns</b><small>Final-sale product; warranty may still apply</small></span></label></fieldset></div>
         </section>
-        <label className="full image-upload">Primary image URL
-          <input name="image_url" type="url" value={gallery[0]??""} onChange={e=>setGallery(current=>[e.target.value,...current.slice(1)])} placeholder="https://example.com/product.jpg" required/>
-          <span><ImagePlus/> Upload multiple images<input type="file" accept="image/*" multiple onChange={e=>uploadMany(e.target.files)}/></span>
+        <section className="full image-upload product-image-uploader">
+          <div className="image-uploader-heading"><div><strong>Product images</strong><small>Upload from your device. The first image becomes the primary product image.</small></div><span>{gallery.length} image{gallery.length===1?"":"s"}</span></div>
+          <label className="device-upload-zone"><ImagePlus/><b>Choose product images</b><small>JPG, PNG or WebP · up to 8 MB each</small><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e=>uploadMany(e.target.files)}/></label>
           <div className="gallery-admin-preview">
             {gallery.map((url,index)=>(
               <figure key={`${url}-${index}`}>
                 <img src={url} alt=""/>
                 <button type="button" onClick={()=>setGallery(current=>current.filter((_,i)=>i!==index))}><X/></button>
-                <small>{index===0?"Primary":index+1}</small>
+                <small>{index===0?"Primary image":`Gallery ${index+1}`}</small>
+                {index>0&&<button className="make-primary" type="button" onClick={()=>setGallery(current=>[current[index],...current.filter((_,i)=>i!==index)])}>Make primary</button>}
               </figure>
             ))}
           </div>
-        </label>
+        </section>
         <section className="full variant-editor">
           <div className="variant-editor-heading"><div><strong>Variants & inventory</strong><small>Manage every sellable combination with its own image, SKU, price and stock.</small></div><button type="button" onClick={addVariant}>+ Custom combination</button></div>
           <div className="variant-presets"><span>Quick setup</span><button type="button" onClick={()=>makeVariants("fashion")}>Clothing · Size + Colour</button><button type="button" onClick={()=>makeVariants("phone")}>Phone · Colour + Storage</button>{variants.length>0&&<button className="clear" type="button" onClick={()=>setVariants([])}>Clear</button>}</div>
