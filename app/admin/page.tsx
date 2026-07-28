@@ -160,7 +160,9 @@ export default function Admin(){
       variantSignatures.add(signature);
       if(!Number.isInteger(Number(variant.inventory))||Number(variant.inventory)<0) return flash("Every variant inventory must be a whole number of zero or more.");
       if(variant.price!==null&&variant.price!==""&&(!Number.isFinite(Number(variant.price))||Number(variant.price)<=0)) return flash("Every variant price must be greater than zero or left blank.");
-      variant.inventory=Number(variant.inventory);variant.price=variant.price===""||variant.price===null?null:Number(variant.price);
+      if(variant.discounted_price!==null&&variant.discounted_price!==""&&(!Number.isFinite(Number(variant.discounted_price))||Number(variant.discounted_price)<=0)) return flash("Every discounted variant price must be greater than zero or left blank.");
+      if(variant.discounted_price&&variant.price&&Number(variant.discounted_price)>=Number(variant.price))return flash("A discounted variant price must be lower than its regular price.");
+      variant.inventory=Number(variant.inventory);variant.price=variant.price===""||variant.price===null?null:Number(variant.price);variant.discounted_price=variant.discounted_price===""||variant.discounted_price===null?null:Number(variant.discounted_price);
     }
     if(payload.variants.length) payload.inventory=payload.variants.reduce((sum:number,variant:any)=>sum+variant.inventory,0);
     payload.warranty_value=Number(payload.warranty_value||0);
@@ -171,7 +173,7 @@ export default function Admin(){
     if(!Number.isInteger(payload.inventory)||payload.inventory<0) return flash("Inventory must be a whole number of zero or more.");
     payload.is_active=f.get("is_active")==="on";
     const gallery=JSON.parse(String(f.get("gallery_urls")||"[]"));
-    if(!gallery.length||gallery.some((url:string)=>{try{const parsed=new URL(url);return !["http:","https:"].includes(parsed.protocol)}catch{return true}})) return flash("Add at least one valid http or https product image URL.");
+    if(gallery.length<3||gallery.length>10||gallery.some((url:string)=>{try{const parsed=new URL(url);return !["http:","https:"].includes(parsed.protocol)}catch{return true}})) return flash("Add 3 to 10 valid product images before saving.");
     payload.image_url=gallery[0];
     const result=await supabase.rpc("save_product_with_gallery",{product_key:editing?.id??null,payload,gallery});
     if(result.error){
@@ -1008,8 +1010,23 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
     return Object.fromEntries(names.map(name=>[name,Array.from(new Set(rows.map((variant:any)=>variant.options?.[name]).filter(Boolean))).join(", ")]));
   });
   const [newAttribute,setNewAttribute]=useState("");
-  const [specifications,setSpecifications]=useState<{name:string;value:string}[]>(Object.entries(item.specifications||{}).map(([name,value])=>({name,value:String(value)})));
-  const addVariant=()=>setVariants(current=>[...current,{id:crypto.randomUUID(),options:Object.fromEntries(variantAttributes.map(name=>[name,""])),sku:"",price:"",inventory:0,image_url:""}]);
+  const fixedSpecificationNames=["Brand","Shipping Weight (kg)","Short Description","Product Type","Return Policy","Bulk Price","Colour","Gender","Condition"];
+  const sourceSpecifications=item.specifications||{};
+  const [productDetails,setProductDetails]=useState<Record<string,string>>({
+    Brand:String(sourceSpecifications.Brand||""),
+    "Shipping Weight (kg)":String(sourceSpecifications["Shipping Weight (kg)"]||""),
+    "Short Description":String(sourceSpecifications["Short Description"]||""),
+    "Product Type":String(sourceSpecifications["Product Type"]||""),
+    "Return Policy":String(sourceSpecifications["Return Policy"]||"7 Days"),
+    "Bulk Price":String(sourceSpecifications["Bulk Price"]||""),
+    Colour:String(sourceSpecifications.Colour||""),
+    Gender:String(sourceSpecifications.Gender||""),
+    Condition:String(sourceSpecifications.Condition||"New")
+  });
+  const [selectedCategory,setSelectedCategory]=useState(String(item.category_id||""));
+  const [hasWarranty,setHasWarranty]=useState(Boolean(Number(item.warranty_value||0)>0||item.warranty_notes));
+  const [specifications,setSpecifications]=useState<{name:string;value:string}[]>(Object.entries(sourceSpecifications).filter(([name])=>!fixedSpecificationNames.includes(name)).map(([name,value])=>({name,value:String(value)})));
+  const addVariant=()=>setVariants(current=>[...current,{id:crypto.randomUUID(),options:Object.fromEntries(variantAttributes.map(name=>[name,""])),sku:"",price:"",discounted_price:"",inventory:0,image_url:""}]);
   const setPreset=(type:"fashion"|"shoes"|"phone"|"watch")=>{
     const presets={
       fashion:{attributes:["Size","Colour"],rows:["S","M","L","XL"].flatMap(Size=>["Black","White"].map(Colour=>({Size,Colour}))),prefix:"FAS"},
@@ -1050,7 +1067,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
     const existing=new Map(variants.map(variant=>[Object.entries(variant.options||{}).sort(([a],[b])=>a.localeCompare(b)).map(([name,value])=>`${name}:${value}`).join("|"),variant]));
     setVariants(combinations.map((options,index)=>{
       const signature=Object.entries(options).sort(([a],[b])=>a.localeCompare(b)).map(([name,value])=>`${name}:${value}`).join("|");
-      return existing.get(signature)??{id:crypto.randomUUID(),options,sku:`TAI-${String(index+1).padStart(3,"0")}`,price:"",inventory:0,image_url:""};
+      return existing.get(signature)??{id:crypto.randomUUID(),options,sku:`TAI-${String(index+1).padStart(3,"0")}`,price:"",discounted_price:"",inventory:0,image_url:""};
     }));
   };
   const uploadVariantImage=(index:number,file?:File)=>{if(file)upload(file,url=>updateVariant(index,"image_url",url))};
@@ -1060,14 +1077,14 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
     for(const file of Array.from(files)){
       await upload(file,(url)=>added.push(url));
     }
-    setGallery(current=>[...current,...added]);
+    setGallery(current=>[...current,...added].slice(0,10));
   };
   
   return <div className="modal-overlay">
     <form className="product-editor animate-scale-up" onSubmit={submit}>
       <input type="hidden" name="gallery_urls" value={JSON.stringify(gallery)}/>
       <input type="hidden" name="variants" value={JSON.stringify(variants.map(variant=>({...variant,options:Object.fromEntries(Object.entries(variant.options||{}).filter(([,value])=>String(value).trim()))})))}/>
-      <input type="hidden" name="specifications" value={JSON.stringify(Object.fromEntries(specifications.filter(spec=>spec.name.trim()&&spec.value.trim()).map(spec=>[spec.name.trim(),spec.value.trim()])))}/>
+      <input type="hidden" name="specifications" value={JSON.stringify({...Object.fromEntries(specifications.filter(spec=>spec.name.trim()&&spec.value.trim()).map(spec=>[spec.name.trim(),spec.value.trim()])),...Object.fromEntries(Object.entries(productDetails).filter(([,value])=>value.trim()))})}/>
       <header>
         <div><span className="editor-eyebrow">Catalogue / {item.id?"Edit product":"New product"}</span><h2>{item.id?"Edit product":"Add product"}</h2></div>
         <button type="button" onClick={close}><X/></button>
@@ -1076,20 +1093,43 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
         <span><b>1</b> Product details</span><span><b>2</b> Media & policies</span><span><b>3</b> Variants & stock</span><span><b>4</b> Publish</span>
       </div>
       <div className="editor-grid">
-        <label>Product name
+        <section className="full konga-form-section">
+          <div className="konga-section-heading"><strong>Product category</strong><small>Choose the closest category and product type.</small></div>
+          <div className="konga-two-column">
+            <label>Main category <span className="required">*</span>
+              <select name="category_id" value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)} required>
+                <option value="">Select one</option>
+                {categories.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label>Sub category / product type <span className="required">*</span>
+              <select value={productDetails["Product Type"]} onChange={e=>setProductDetails(current=>({...current,"Product Type":e.target.value}))} required>
+                <option value="">Select one</option>
+                {["Accessories","Beauty & personal care","Clothing","Computers","Electronics","Footwear","Food & grocery","Home & kitchen","Mobile phones","Sports & fitness","Other"].map(value=><option key={value}>{value}</option>)}
+              </select>
+            </label>
+          </div>
+          {selectedCategory&&productDetails["Product Type"]&&<div className="category-complete"><CheckCircle2 size={17}/> Maximum sub-category reached!</div>}
+        </section>
+        <section className="full konga-form-section">
+          <div className="konga-section-heading"><strong>Product details</strong><small>Enter the factual information customers need to identify this item.</small></div>
+          <div className="konga-two-column">
+            <label>Brand <span className="required">*</span><small>For unbranded items, use the hyphen sign (-)</small>
+              <input value={productDetails.Brand} onChange={e=>setProductDetails(current=>({...current,Brand:e.target.value}))} placeholder="What's the brand of the item?" required/>
+            </label>
+            <label>Shipping weight (kg) <span className="required">*</span>
+              <input type="number" min=".01" step=".01" value={productDetails["Shipping Weight (kg)"]} onChange={e=>setProductDetails(current=>({...current,"Shipping Weight (kg)":e.target.value}))} placeholder="What's the weight of the item in kilograms?" required/>
+            </label>
+          </div>
+        </section>
+        <label className="full">Product title <span className="required">*</span> <small>Do not add the brand name here</small>
           <input name="name" defaultValue={item.name} required minLength={2} maxLength={120} onBlur={e=>{
             const slug=(e.currentTarget.form?.elements.namedItem("slug") as HTMLInputElement);
             if(slug&&!slug.value) slug.value=e.target.value.toLowerCase().replace(/[^a-z0-9]+/g,"-");
-          }}/>
+          }} placeholder="What's the name of the item?"/>
         </label>
         <label>Slug
           <input name="slug" defaultValue={item.slug} required minLength={2} maxLength={140} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers and single hyphens only."/>
-        </label>
-        <label>Category
-          <select name="category_id" defaultValue={item.category_id} required>
-            <option value="">Choose category</option>
-            {categories.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}
-          </select>
         </label>
         <label>Price
           <input name="price" type="number" min="0.01" max="1000000000" step=".01" defaultValue={item.price} required/>
@@ -1104,20 +1144,37 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
         <label>Badge
           <input name="badge" defaultValue={item.badge} maxLength={30}/>
         </label>
-        <label className="full">Description
-          <textarea name="description" defaultValue={item.description} minLength={10} maxLength={3000}/>
+        <label className="full">Description <span className="required">*</span>
+          <textarea name="description" defaultValue={item.description} minLength={10} maxLength={3000} required placeholder="Describe the product, its features, materials and use"/>
+        </label>
+        <label className="full">Short description <span className="required">*</span>
+          <small>Input product highlights/features in bullets. Not more than 200 characters. Characters: {productDetails["Short Description"].length}/200</small>
+          <textarea value={productDetails["Short Description"]} onChange={e=>setProductDetails(current=>({...current,"Short Description":e.target.value.slice(0,200)}))} maxLength={200} required placeholder="• Key feature&#10;• Key benefit"/>
         </label>
         <section className="full product-policy-editor">
           <div className="policy-heading"><div><strong>Specifications</strong><small>Add factual details that apply to this product.</small></div><button type="button" onClick={()=>setSpecifications(current=>[...current,{name:"",value:""}])}>+ Add specification</button></div>
           {specifications.length===0?<div className="variant-empty">No specifications added yet.</div>:<div className="specification-rows">{specifications.map((spec,index)=><div key={index}><input value={spec.name} onChange={e=>setSpecifications(current=>current.map((row,i)=>i===index?{...row,name:e.target.value}:row))} placeholder="e.g. Material"/><input value={spec.value} onChange={e=>setSpecifications(current=>current.map((row,i)=>i===index?{...row,value:e.target.value}:row))} placeholder="e.g. 100% cotton"/><button type="button" onClick={()=>setSpecifications(current=>current.filter((_,i)=>i!==index))}><X/></button></div>)}</div>}
         </section>
         <section className="full product-policy-editor">
-          <div className="policy-heading"><div><strong>Warranty & returns</strong><small>These terms appear clearly on the product page.</small></div></div>
-          <div className="policy-grid"><label>Warranty duration<input name="warranty_value" type="number" min="0" max="120" step="1" defaultValue={item.warranty_value??0}/></label><label>Warranty period<select name="warranty_unit" defaultValue={item.warranty_unit||"months"}><option value="days">Days</option><option value="months">Months</option><option value="years">Years</option></select></label><label className="full">Warranty coverage<textarea name="warranty_notes" maxLength={1000} defaultValue={item.warranty_notes||""} placeholder="Coverage, exclusions and how customers make a claim"/></label><fieldset className="return-choice"><legend>Can this product be returned?</legend><label><input type="radio" name="returnable" value="yes" defaultChecked={item.returnable!==false}/><span><b>Yes — 7-day return</b><small>Eligible within 7 days of delivery</small></span></label><label><input type="radio" name="returnable" value="no" defaultChecked={item.returnable===false}/><span><b>No returns</b><small>Final-sale product; warranty may still apply</small></span></label></fieldset></div>
+          <div className="policy-heading"><div><strong>Warranty options</strong><small>Warranty details appear only when “Yes” is selected.</small></div></div>
+          <fieldset className="warranty-choice"><legend>Do you provide a warranty? <span className="required">*</span></legend><label><input type="radio" checked={!hasWarranty} onChange={()=>setHasWarranty(false)}/> No warranty</label><label><input type="radio" checked={hasWarranty} onChange={()=>setHasWarranty(true)}/> Yes</label></fieldset>
+          {!hasWarranty?<><input type="hidden" name="warranty_value" value="0"/><input type="hidden" name="warranty_unit" value="months"/><input type="hidden" name="warranty_notes" value=""/></>:<div className="policy-grid"><label>Warranty duration <span className="required">*</span><input name="warranty_value" type="number" min="1" max="120" step="1" defaultValue={item.warranty_value||1} required/></label><label>Warranty period <span className="required">*</span><select name="warranty_unit" defaultValue={item.warranty_unit||"months"} required><option value="days">Days</option><option value="months">Months</option><option value="years">Years</option></select></label><label className="full">Warranty details <span className="required">*</span><textarea name="warranty_notes" maxLength={1000} defaultValue={item.warranty_notes||""} placeholder="Coverage, exclusions and how customers make a claim" required/></label></div>}
+        </section>
+        <section className="full konga-form-section">
+          <div className="konga-section-heading"><strong>Other product options</strong><small>Set return, colour, gender and condition information.</small></div>
+          <div className="konga-two-column">
+            <label>Return policy<select value={productDetails["Return Policy"]} onChange={e=>setProductDetails(current=>({...current,"Return Policy":e.target.value}))}><option>7 Days</option><option>14 Days</option><option>30 Days</option><option>No Returns</option></select></label>
+            <label>Bulk price<input type="number" min="0" step=".01" value={productDetails["Bulk Price"]} onChange={e=>setProductDetails(current=>({...current,"Bulk Price":e.target.value}))} placeholder="Optional"/></label>
+            <label>Colour <span className="required">*</span><select value={productDetails.Colour} onChange={e=>setProductDetails(current=>({...current,Colour:e.target.value}))} required><option value="">Select one</option>{["Black","Blue","Brown","Gold","Green","Grey","Multi-colour","Orange","Pink","Purple","Red","Silver","White","Yellow","Not applicable"].map(value=><option key={value}>{value}</option>)}</select></label>
+            <label>Gender <span className="required">*</span><select value={productDetails.Gender} onChange={e=>setProductDetails(current=>({...current,Gender:e.target.value}))} required><option value="">Select one</option><option>Female</option><option>Male</option><option>Unisex</option><option>Kids</option><option>Not applicable</option></select></label>
+            <label>Condition <span className="required">*</span><select value={productDetails.Condition} onChange={e=>setProductDetails(current=>({...current,Condition:e.target.value}))} required><option>New</option><option>Refurbished</option><option>Used - like new</option><option>Used - good</option></select></label>
+          </div>
+          <input type="hidden" name="returnable" value={productDetails["Return Policy"]==="No Returns"?"no":"yes"}/>
         </section>
         <section className="full image-upload product-image-uploader">
-          <div className="image-uploader-heading"><div><strong>Product images</strong><small>Upload from your device. The first image becomes the primary product image.</small></div><span>{gallery.length} image{gallery.length===1?"":"s"}</span></div>
-          <label className="device-upload-zone"><ImagePlus/><b>Choose product images</b><small>JPG, PNG or WebP · up to 8 MB each</small><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e=>uploadMany(e.target.files)}/></label>
+          <div className="image-uploader-heading"><div><strong>Product images <span className="required">*</span></strong><small>Recommended 500 × 500 px. Minimum 3 images, maximum 10; the first is primary.</small></div><span>{gallery.length} of 10 uploaded</span></div>
+          <label className="device-upload-zone"><ImagePlus/><b>Drag and drop or click here to add images</b><small>Recommended 500 × 500 px · JPG, PNG or WebP · up to 8 MB each</small><input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={gallery.length>=10} onChange={e=>uploadMany(e.target.files)}/></label>
+          {gallery.length>0&&gallery.length<3&&<div className="image-requirement">Add {3-gallery.length} more image{3-gallery.length===1?"":"s"} to continue.</div>}
           <div className="gallery-admin-preview">
             {gallery.map((url,index)=>(
               <figure key={`${url}-${index}`}>
@@ -1142,12 +1199,15 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
           {variants.length===0?<div className="variant-empty">No variants — customers will add this product directly.</div>:<div className="variant-list">{variants.map((variant,index)=><article key={variant.id}>
             <div className="variant-row-title"><div className="variant-image-cell">{variant.image_url?<img src={variant.image_url} alt=""/>:<ImagePlus/>}<label>Upload<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>uploadVariantImage(index,e.target.files?.[0])}/></label></div><div><b>{Object.values(variant.options||{}).filter(Boolean).join(" / ")||`Combination ${index+1}`}</b><small>Variant {index+1}</small></div><button type="button" onClick={()=>setVariants(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
             <div className="variant-fields variant-combination-grid">
-              {variantAttributes.map(attribute=><label key={attribute}>{attribute}<input value={variant.options?.[attribute]||""} onChange={e=>updateVariant(index,`option.${attribute}`,e.target.value)} placeholder={`Enter ${attribute.toLowerCase()}`} required/></label>)}
+              {variantAttributes.map(attribute=>{const options=Array.from(new Set([...(variantValueDrafts[attribute]||"").split(",").map(value=>value.trim()).filter(Boolean),variant.options?.[attribute]].filter(Boolean)));return <label key={attribute}>{attribute} <span className="required">*</span><select value={variant.options?.[attribute]||""} onChange={e=>updateVariant(index,`option.${attribute}`,e.target.value)} required><option value="">Select one</option>{options.map(value=><option value={value} key={value}>{value}</option>)}</select></label>})}
               <label>SKU<input value={variant.sku||""} onChange={e=>updateVariant(index,"sku",e.target.value)} placeholder="TAI-BLK-128"/></label>
-              <label>Price override<input type="number" min="0.01" step=".01" value={variant.price??""} onChange={e=>updateVariant(index,"price",e.target.value)} placeholder="Use base price"/></label>
-              <label>Stock<input type="number" min="0" step="1" value={variant.inventory??0} onChange={e=>updateVariant(index,"inventory",e.target.value)} required/></label>
+              <label>Quantity <span className="required">*</span><input type="number" min="0" step="1" value={variant.inventory??0} onChange={e=>updateVariant(index,"inventory",e.target.value)} required/></label>
+              <label>Price <span className="required">*</span><input type="number" min="0.01" step=".01" value={variant.price??""} onChange={e=>updateVariant(index,"price",e.target.value)} placeholder={`Base: ₦${Number(item.price||0).toLocaleString()}`} required/></label>
+              <label>Discounted price<input type="number" min="0.01" step=".01" value={variant.discounted_price??""} onChange={e=>updateVariant(index,"discounted_price",e.target.value)} placeholder="Optional"/></label>
+              <label>Total price (inc VAT)<input value={`₦${Number(variant.discounted_price||variant.price||item.price||0).toLocaleString()}`} readOnly/></label>
             </div>
           </article>)}</div>}
+          <button className="add-new-variant" type="button" onClick={addVariant} disabled={!variantAttributes.length}>Add new variant</button>
         </section>
         <label className="check"><input name="is_active" type="checkbox" defaultChecked={item.is_active}/> Active and visible</label>
       </div>
