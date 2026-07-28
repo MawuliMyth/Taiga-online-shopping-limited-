@@ -46,6 +46,7 @@ export default function Admin(){
         [editingBanner,setEditingBanner]=useState<any|null>(null),
         [banners,setBanners]=useState<any[]>([]),
         [categoryName,setCategoryName]=useState(""),
+        [productView,setProductView]=useState<"all"|"active"|"draft"|"low">("all"),
         [notice,setNotice]=useState(""),
         [commerceTablesReady,setCommerceTablesReady]=useState(true);
 
@@ -304,7 +305,11 @@ export default function Admin(){
         avg=orders.length?revenue/orders.length:0,
         low=products.filter(p=>p.inventory<10).length;
         
-  const filteredProducts=products.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredProducts=products.filter(p=>{
+    const matchesSearch=p.name.toLowerCase().includes(search.toLowerCase())||String(p.sku??"").toLowerCase().includes(search.toLowerCase());
+    const matchesView=productView==="all"||(productView==="active"&&p.is_active)||(productView==="draft"&&!p.is_active)||(productView==="low"&&p.inventory<10);
+    return matchesSearch&&matchesView;
+  });
 
   // Fulfillment pipeline stats calculations
   const ordersPipeline = useMemo(() => {
@@ -374,6 +379,11 @@ export default function Admin(){
       </header>
 
       <div className="dash-content">
+        {(low>0||ordersPipeline.pending>0)&&<aside className="operations-alert" aria-label="Operations requiring attention">
+          <div className="operations-alert-icon"><AlertTriangle size={18}/></div>
+          <div><strong>Store operations need attention</strong><span>{low>0?`${low} product${low===1?"":"s"} below the stock threshold. `:""}{ordersPipeline.pending>0?`${ordersPipeline.pending} order${ordersPipeline.pending===1?"":"s"} awaiting payment or review.`:""}</span></div>
+          <div className="operations-alert-actions">{low>0&&<button onClick={()=>{setProductView("low");setTab("Products")}}>Review stock <ArrowRight size={14}/></button>}{ordersPipeline.pending>0&&<button onClick={()=>setTab("Orders")}>Open orders <ArrowRight size={14}/></button>}</div>
+        </aside>}
         <div className="dash-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <span className="admin-eyebrow">Taiga Commerce Console</span>
@@ -453,7 +463,20 @@ export default function Admin(){
           {tab==="Orders" && <OrdersTable orders={orders} change={orderStatus} onViewDetails={setSelectedOrderDetails} />} 
 
           {tab==="Products" && (
-            <div className="admin-table-wrap" style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", marginTop: "24px" }}>
+            <>
+            <section className="catalogue-command-bar" aria-label="Product catalogue summary">
+              <div><span>Catalogue</span><strong>{products.length}</strong><small>Total products</small></div>
+              <div><span>Live</span><strong>{products.filter(p=>p.is_active).length}</strong><small>Visible in store</small></div>
+              <div><span>Drafts</span><strong>{products.filter(p=>!p.is_active).length}</strong><small>Hidden products</small></div>
+              <div><span>Attention</span><strong>{low}</strong><small>Low stock</small></div>
+            </section>
+            <div className="catalogue-toolbar">
+              <div className="catalogue-view-tabs" role="group" aria-label="Filter products">
+                {(["all","active","draft","low"] as const).map(view=><button key={view} className={productView===view?"active":""} onClick={()=>{setProductView(view);setPage(1)}}>{view==="all"?"All products":view==="active"?"Live":view==="draft"?"Drafts":"Low stock"}</button>)}
+              </div>
+              <span>{filteredProducts.length} result{filteredProducts.length===1?"":"s"}</span>
+            </div>
+            <div className="admin-table-wrap" style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
               <table className="admin-table" style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "var(--secondary)", borderBottom: "1px solid var(--border)" }}>
@@ -544,6 +567,7 @@ export default function Admin(){
               </table>
               <Pagination page={page} total={filteredProducts.length} pageSize={10} change={setPage}/>
             </div>
+            </>
           )}
 
           {tab==="Customers" && (
@@ -978,6 +1002,11 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
   const [gallery,setGallery]=useState<string[]>(item.product_images?.sort((a:any,b:any)=>a.sort_order-b.sort_order).map((i:any)=>i.image_url)??(item.image_url?[item.image_url]:[]));
   const [variants,setVariants]=useState<any[]>(Array.isArray(item.variants)?item.variants:[]);
   const [variantAttributes,setVariantAttributes]=useState<string[]>(()=>Array.from(new Set((Array.isArray(item.variants)?item.variants:[]).flatMap((variant:any)=>Object.keys(variant.options||{})))) as string[]);
+  const [variantValueDrafts,setVariantValueDrafts]=useState<Record<string,string>>(()=>{
+    const rows=Array.isArray(item.variants)?item.variants:[];
+    const names=Array.from(new Set(rows.flatMap((variant:any)=>Object.keys(variant.options||{})))) as string[];
+    return Object.fromEntries(names.map(name=>[name,Array.from(new Set(rows.map((variant:any)=>variant.options?.[name]).filter(Boolean))).join(", ")]));
+  });
   const [newAttribute,setNewAttribute]=useState("");
   const [specifications,setSpecifications]=useState<{name:string;value:string}[]>(Object.entries(item.specifications||{}).map(([name,value])=>({name,value:String(value)})));
   const addVariant=()=>setVariants(current=>[...current,{id:crypto.randomUUID(),options:Object.fromEntries(variantAttributes.map(name=>[name,""])),sku:"",price:"",inventory:0,image_url:""}]);
@@ -989,12 +1018,14 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
       watch:{attributes:["Case Size","Strap Material","Colour"],rows:["40 mm","44 mm"].flatMap(size=>["Silicone","Leather"].map(material=>({"Case Size":size,"Strap Material":material,Colour:"Black"}))),prefix:"WAT"}
     },preset=presets[type];
     setVariantAttributes(preset.attributes);
+    setVariantValueDrafts(Object.fromEntries(preset.attributes.map(attribute=>[attribute,Array.from(new Set(preset.rows.map((row:any)=>row[attribute]).filter(Boolean))).join(", ")])));
     setVariants(preset.rows.map((options,index)=>({id:crypto.randomUUID(),options,sku:`${preset.prefix}-${String(index+1).padStart(2,"0")}`,price:"",inventory:0,image_url:""})));
   };
   const addAttribute=()=>{
     const name=newAttribute.trim().replace(/\s+/g," ");
     if(!name||variantAttributes.some(attribute=>attribute.toLowerCase()===name.toLowerCase()))return;
     setVariantAttributes(current=>[...current,name]);
+    setVariantValueDrafts(current=>({...current,[name]:""}));
     setVariants(current=>current.map(variant=>({...variant,options:{...variant.options,[name]:""}})));
     setNewAttribute("");
   };
@@ -1002,13 +1033,26 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
     const nextName=nextValue.trim().replace(/\s+/g," ");
     if(!nextName||nextName===oldName||variantAttributes.some(name=>name!==oldName&&name.toLowerCase()===nextName.toLowerCase()))return;
     setVariantAttributes(current=>current.map(name=>name===oldName?nextName:name));
+    setVariantValueDrafts(current=>{const next={...current,[nextName]:current[oldName]??""};delete next[oldName];return next});
     setVariants(current=>current.map(variant=>{const options={...variant.options};options[nextName]=options[oldName]??"";delete options[oldName];return {...variant,options}}));
   };
   const removeAttribute=(name:string)=>{
     setVariantAttributes(current=>current.filter(attribute=>attribute!==name));
+    setVariantValueDrafts(current=>{const next={...current};delete next[name];return next});
     setVariants(current=>current.map(variant=>{const options={...variant.options};delete options[name];return {...variant,options}}));
   };
   const updateVariant=(index:number,key:string,value:any)=>setVariants(current=>current.map((variant,i)=>i===index?key.startsWith("option.")?{...variant,options:{...variant.options,[key.slice(7)]:value}}:{...variant,[key]:value}:variant));
+  const generateVariantMatrix=()=>{
+    const groups=variantAttributes.map(name=>({name,values:Array.from(new Set((variantValueDrafts[name]||"").split(",").map(value=>value.trim()).filter(Boolean)))}));
+    if(!groups.length||groups.some(group=>!group.values.length))return;
+    const combinations=groups.reduce<Record<string,string>[]>((rows,group)=>rows.flatMap(row=>group.values.map(value=>({...row,[group.name]:value}))),[{}]);
+    if(combinations.length>100)return;
+    const existing=new Map(variants.map(variant=>[Object.entries(variant.options||{}).sort(([a],[b])=>a.localeCompare(b)).map(([name,value])=>`${name}:${value}`).join("|"),variant]));
+    setVariants(combinations.map((options,index)=>{
+      const signature=Object.entries(options).sort(([a],[b])=>a.localeCompare(b)).map(([name,value])=>`${name}:${value}`).join("|");
+      return existing.get(signature)??{id:crypto.randomUUID(),options,sku:`TAI-${String(index+1).padStart(3,"0")}`,price:"",inventory:0,image_url:""};
+    }));
+  };
   const uploadVariantImage=(index:number,file?:File)=>{if(file)upload(file,url=>updateVariant(index,"image_url",url))};
   const uploadMany=async(files:FileList|null)=>{
     if(!files) return;
@@ -1025,9 +1069,12 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
       <input type="hidden" name="variants" value={JSON.stringify(variants.map(variant=>({...variant,options:Object.fromEntries(Object.entries(variant.options||{}).filter(([,value])=>String(value).trim()))})))}/>
       <input type="hidden" name="specifications" value={JSON.stringify(Object.fromEntries(specifications.filter(spec=>spec.name.trim()&&spec.value.trim()).map(spec=>[spec.name.trim(),spec.value.trim()])))}/>
       <header>
-        <h2>{item.id?"Edit product":"Add product"}</h2>
+        <div><span className="editor-eyebrow">Catalogue / {item.id?"Edit product":"New product"}</span><h2>{item.id?"Edit product":"Add product"}</h2></div>
         <button type="button" onClick={close}><X/></button>
       </header>
+      <div className="product-editor-steps" aria-label="Product setup sections">
+        <span><b>1</b> Product details</span><span><b>2</b> Media & policies</span><span><b>3</b> Variants & stock</span><span><b>4</b> Publish</span>
+      </div>
       <div className="editor-grid">
         <label>Product name
           <input name="name" defaultValue={item.name} required minLength={2} maxLength={120} onBlur={e=>{
@@ -1084,11 +1131,13 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
         </section>
         <section className="full variant-editor">
           <div className="variant-editor-heading"><div><strong>Variants & inventory</strong><small>Create option types for any product, then manage every sellable combination.</small></div><button type="button" onClick={addVariant} disabled={!variantAttributes.length}>+ Add combination</button></div>
-          <div className="variant-presets"><span>Quick setup</span><button type="button" onClick={()=>setPreset("fashion")}>Clothing</button><button type="button" onClick={()=>setPreset("shoes")}>Shoes</button><button type="button" onClick={()=>setPreset("phone")}>Phones</button><button type="button" onClick={()=>setPreset("watch")}>Watches</button>{(variants.length>0||variantAttributes.length>0)&&<button className="clear" type="button" onClick={()=>{setVariants([]);setVariantAttributes([])}}>Clear</button>}</div>
+          <div className="variant-presets"><span>Quick setup</span><button type="button" onClick={()=>setPreset("fashion")}>Clothing</button><button type="button" onClick={()=>setPreset("shoes")}>Shoes</button><button type="button" onClick={()=>setPreset("phone")}>Phones</button><button type="button" onClick={()=>setPreset("watch")}>Watches</button>{(variants.length>0||variantAttributes.length>0)&&<button className="clear" type="button" onClick={()=>{setVariants([]);setVariantAttributes([]);setVariantValueDrafts({})}}>Clear</button>}</div>
           <div className="variant-attribute-builder">
-            <div><strong>Option types</strong><small>Examples: Shoe Size, Case Size, Strap Material, Capacity, Voltage, Scent or Shade.</small></div>
+            <div><strong>Option types & values</strong><small>Add values separated by commas, then generate every sellable combination automatically.</small></div>
             <div className="variant-attribute-add"><input value={newAttribute} onChange={e=>setNewAttribute(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addAttribute()}}} maxLength={40} placeholder="Enter an option type"/><button type="button" onClick={addAttribute}>Add option</button></div>
-            {variantAttributes.length>0&&<div className="variant-attribute-chips">{variantAttributes.map(attribute=><div key={attribute}><input defaultValue={attribute} aria-label={`Rename ${attribute}`} onBlur={e=>renameAttribute(attribute,e.target.value)}/><button type="button" aria-label={`Remove ${attribute}`} onClick={()=>removeAttribute(attribute)}><X/></button></div>)}</div>}
+            {variantAttributes.length>0&&<div className="variant-matrix-builder">{variantAttributes.map(attribute=><div className="variant-matrix-row" key={attribute}><div><input defaultValue={attribute} aria-label={`Rename ${attribute}`} onBlur={e=>renameAttribute(attribute,e.target.value)}/><button type="button" aria-label={`Remove ${attribute}`} onClick={()=>removeAttribute(attribute)}><X/></button></div><input value={variantValueDrafts[attribute]??""} onChange={e=>setVariantValueDrafts(current=>({...current,[attribute]:e.target.value}))} placeholder={attribute.toLowerCase().includes("size")?"S, M, L, XL":attribute.toLowerCase().includes("colour")?"Black, White, Blue":`Enter ${attribute.toLowerCase()} values`}/></div>)}
+              <div className="variant-matrix-summary"><span><b>{variantAttributes.length}</b> option type{variantAttributes.length===1?"":"s"}</span><span><b>{variantAttributes.reduce((total,name)=>total*Math.max(1,(variantValueDrafts[name]||"").split(",").map(value=>value.trim()).filter(Boolean).length),1)}</b> possible combinations</span><button type="button" onClick={generateVariantMatrix}>Generate combinations</button></div>
+            </div>}
           </div>
           {variants.length===0?<div className="variant-empty">No variants — customers will add this product directly.</div>:<div className="variant-list">{variants.map((variant,index)=><article key={variant.id}>
             <div className="variant-row-title"><div className="variant-image-cell">{variant.image_url?<img src={variant.image_url} alt=""/>:<ImagePlus/>}<label>Upload<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>uploadVariantImage(index,e.target.files?.[0])}/></label></div><div><b>{Object.values(variant.options||{}).filter(Boolean).join(" / ")||`Combination ${index+1}`}</b><small>Variant {index+1}</small></div><button type="button" onClick={()=>setVariants(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
@@ -1103,6 +1152,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
         <label className="check"><input name="is_active" type="checkbox" defaultChecked={item.is_active}/> Active and visible</label>
       </div>
       <footer>
+        <div className="save-readiness"><CheckCircle2 size={16}/><span><b>Ready when required fields are complete</b><small>Images, pricing and every variant stock value are checked before publishing.</small></span></div>
         <button type="button" onClick={close}>Cancel</button>
         <button>Save product</button>
       </footer>
