@@ -1011,7 +1011,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
   });
   const [newAttribute,setNewAttribute]=useState("");
   const fixedSpecificationNames=["Brand","Shipping Weight (kg)","Short Description","Product Type","Return Policy","Bulk Price","Colour","Gender","Condition"];
-  const sourceSpecifications=item.specifications||{};
+  const sourceSpecifications=(()=>{try{const value=typeof item.specifications==="string"?JSON.parse(item.specifications):item.specifications;return value&&typeof value==="object"&&!Array.isArray(value)?value:{}}catch{return {}}})();
   const [productDetails,setProductDetails]=useState<Record<string,string>>({
     Brand:String(sourceSpecifications.Brand||""),
     "Shipping Weight (kg)":String(sourceSpecifications["Shipping Weight (kg)"]||""),
@@ -1031,7 +1031,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
     const presets={
       fashion:{attributes:["Size","Colour"],rows:["S","M","L","XL"].flatMap(Size=>["Black","White"].map(Colour=>({Size,Colour}))),prefix:"FAS"},
       shoes:{attributes:["Shoe Size","Colour"],rows:["39","40","41","42","43","44"].flatMap(size=>["Black","Brown"].map(Colour=>({"Shoe Size":size,Colour}))),prefix:"SHO"},
-      phone:{attributes:["Colour","Storage"],rows:["128 GB","256 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({Storage,Colour}))),prefix:"PHN"},
+      phone:{attributes:["Operating System","Storage","Colour"],rows:["Android","iOS"].flatMap(OperatingSystem=>["128 GB","256 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({"Operating System":OperatingSystem,Storage,Colour})))),prefix:"PHN"},
       watch:{attributes:["Case Size","Strap Material","Colour"],rows:["40 mm","44 mm"].flatMap(size=>["Silicone","Leather"].map(material=>({"Case Size":size,"Strap Material":material,Colour:"Black"}))),prefix:"WAT"}
     },preset=presets[type];
     setVariantAttributes(preset.attributes);
@@ -1070,7 +1070,6 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
       return existing.get(signature)??{id:crypto.randomUUID(),options,sku:`TAI-${String(index+1).padStart(3,"0")}`,price:"",discounted_price:"",inventory:0,image_url:""};
     }));
   };
-  const uploadVariantImage=(index:number,file?:File)=>{if(file)upload(file,url=>updateVariant(index,"image_url",url))};
   const uploadMany=async(files:FileList|null)=>{
     if(!files) return;
     const added:string[]=[];
@@ -1188,7 +1187,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
         </section>
         <section className="full variant-editor">
           <div className="variant-editor-heading"><div><strong>Variants & inventory</strong><small>Create option types for any product, then manage every sellable combination.</small></div><button type="button" onClick={addVariant} disabled={!variantAttributes.length}>+ Add combination</button></div>
-          <div className="variant-presets"><span>Quick setup</span><button type="button" onClick={()=>setPreset("fashion")}>Clothing</button><button type="button" onClick={()=>setPreset("shoes")}>Shoes</button><button type="button" onClick={()=>setPreset("phone")}>Phones</button><button type="button" onClick={()=>setPreset("watch")}>Watches</button>{(variants.length>0||variantAttributes.length>0)&&<button className="clear" type="button" onClick={()=>{setVariants([]);setVariantAttributes([]);setVariantValueDrafts({})}}>Clear</button>}</div>
+          <div className="variant-presets"><span>Quick setup</span><button type="button" onClick={()=>setPreset("fashion")}>Clothing</button><button type="button" onClick={()=>setPreset("shoes")}>Shoes</button><button type="button" onClick={()=>setPreset("phone")}>Smartphones</button><button type="button" onClick={()=>setPreset("watch")}>Watches</button>{(variants.length>0||variantAttributes.length>0)&&<button className="clear" type="button" onClick={()=>{setVariants([]);setVariantAttributes([]);setVariantValueDrafts({})}}>Clear</button>}</div>
           <div className="variant-attribute-builder">
             <div><strong>Option types & values</strong><small>Add values separated by commas, then generate every sellable combination automatically.</small></div>
             <div className="variant-attribute-add"><input value={newAttribute} onChange={e=>setNewAttribute(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addAttribute()}}} maxLength={40} placeholder="Enter an option type"/><button type="button" onClick={addAttribute}>Add option</button></div>
@@ -1197,7 +1196,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
             </div>}
           </div>
           {variants.length===0?<div className="variant-empty">No variants — customers will add this product directly.</div>:<div className="variant-list">{variants.map((variant,index)=><article key={variant.id}>
-            <div className="variant-row-title"><div className="variant-image-cell">{variant.image_url?<img src={variant.image_url} alt=""/>:<ImagePlus/>}<label>Upload<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>uploadVariantImage(index,e.target.files?.[0])}/></label></div><div><b>{Object.values(variant.options||{}).filter(Boolean).join(" / ")||`Combination ${index+1}`}</b><small>Variant {index+1}</small></div><button type="button" onClick={()=>setVariants(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
+            <div className="variant-row-title"><div><b>{Object.values(variant.options||{}).filter(Boolean).join(" / ")||`Combination ${index+1}`}</b><small>Uses the shared product gallery · Variant {index+1}</small></div><button type="button" onClick={()=>setVariants(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
             <div className="variant-fields variant-combination-grid">
               {variantAttributes.map(attribute=>{const options=Array.from(new Set([...(variantValueDrafts[attribute]||"").split(",").map(value=>value.trim()).filter(Boolean),variant.options?.[attribute]].filter(Boolean)));return <label key={attribute}>{attribute} <span className="required">*</span><select value={variant.options?.[attribute]||""} onChange={e=>updateVariant(index,`option.${attribute}`,e.target.value)} required><option value="">Select one</option>{options.map(value=><option value={value} key={value}>{value}</option>)}</select></label>})}
               <label>SKU<input value={variant.sku||""} onChange={e=>updateVariant(index,"sku",e.target.value)} placeholder="TAI-BLK-128"/></label>
