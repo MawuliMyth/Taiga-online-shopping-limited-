@@ -1211,9 +1211,11 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
         <label className="check"><input name="is_active" type="checkbox" defaultChecked={item.is_active}/> Active and visible</label>
       </div>
       <footer>
-        <div className="save-readiness"><CheckCircle2 size={16}/><span><b>Ready when required fields are complete</b><small>Images, pricing and every variant stock value are checked before publishing.</small></span></div>
-        <button type="button" onClick={close}>Cancel</button>
-        <button>Save product</button>
+        <div className="save-readiness"><i><CheckCircle2 size={18}/></i><span><b>Product validation is active</b><small>Required details, images, pricing and variant stock are checked when you save.</small></span></div>
+        <div className="editor-footer-actions">
+          <button className="editor-cancel" type="button" onClick={close}>Cancel</button>
+          <button className="editor-save" type="submit"><CheckCircle2 size={16}/> Save product</button>
+        </div>
       </footer>
     </form>
   </div>
