@@ -4619,15 +4619,15 @@ footer {
 
 /* Taiga admin system — layout and component hierarchy adapted from the supplied guide. */
 .dashboard-shell{background:#f4f7f5!important;font-family:var(--font-body),system-ui,sans-serif}
-.dashboard-shell .sidebar{background:var(--card-bg);color:var(--foreground);padding:20px 12px;border-right:1px solid var(--border);box-shadow:none}
-.dashboard-shell .sidebar{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--primary) 45%,transparent) transparent;overscroll-behavior:contain}.dashboard-shell .sidebar::-webkit-scrollbar{width:6px}.dashboard-shell .sidebar::-webkit-scrollbar-track{background:transparent}.dashboard-shell .sidebar::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--primary) 40%,transparent);border-radius:999px}.dashboard-shell .sidebar::-webkit-scrollbar-thumb:hover{background:var(--primary)}
-.dashboard-shell .sidebar .logo{color:var(--foreground);margin:0}.dashboard-shell .sidebar .logo>span{width:42px;height:42px;border:1px solid var(--border);background:var(--primary-light);color:var(--primary)}
-.dashboard-shell .side-label{margin:18px 12px 8px;color:var(--muted);font-size:10px;font-weight:850;letter-spacing:.11em}
-.dashboard-shell .side-nav button,.dashboard-shell .side-nav a{min-height:42px;color:var(--muted);font-size:13px;font-weight:700;border-radius:8px}
-.dashboard-shell .side-nav button:hover,.dashboard-shell .side-nav a:hover{color:var(--foreground);background:#f1f5f2}
-.dashboard-shell .side-nav button.active{color:var(--primary);background:var(--primary-light);box-shadow:inset 3px 0 0 var(--primary)}
-.dashboard-shell .side-nav button i{background:var(--primary-light);color:var(--primary)}
-.dashboard-shell .sidebar-bottom{border-top:1px solid var(--border)}
+.dashboard-shell .sidebar{background:linear-gradient(180deg,#087a5f 0%,#075d49 100%);color:#fff;padding:20px 12px;border-right:0;box-shadow:8px 0 28px rgba(7,93,73,.12)}
+.dashboard-shell .sidebar{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent;overscroll-behavior:contain}.dashboard-shell .sidebar::-webkit-scrollbar{width:6px}.dashboard-shell .sidebar::-webkit-scrollbar-track{background:transparent}.dashboard-shell .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:999px}.dashboard-shell .sidebar::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.5)}
+.dashboard-shell .sidebar .logo{color:#fff;margin:0}.dashboard-shell .sidebar .logo small{color:rgba(255,255,255,.68)}.dashboard-shell .sidebar .logo>span{width:42px;height:42px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.14);color:#fff}
+.dashboard-shell .side-label{margin:18px 12px 8px;color:rgba(255,255,255,.58);font-size:10px;font-weight:850;letter-spacing:.11em}
+.dashboard-shell .side-nav button,.dashboard-shell .side-nav a{min-height:42px;color:rgba(255,255,255,.76);font-size:13px;font-weight:700;border-radius:8px}
+.dashboard-shell .side-nav button:hover,.dashboard-shell .side-nav a:hover{color:#fff;background:rgba(255,255,255,.1)}
+.dashboard-shell .side-nav button.active{color:#075d49;background:#fff;box-shadow:0 6px 18px rgba(4,55,43,.16)}
+.dashboard-shell .side-nav button i{background:rgba(255,255,255,.12);color:#fff}.dashboard-shell .side-nav button.active i{background:var(--primary-light);color:var(--primary)}
+.dashboard-shell .sidebar-bottom{border-top:1px solid rgba(255,255,255,.18)}
 .dash-topbar{min-height:64px;height:auto;padding:10px 28px;background:var(--card-bg);border-bottom:1px solid var(--border)}
 .dash-search{width:min(520px,50vw);height:44px;background:#f7faf8;border-color:var(--border);padding-right:8px}
 .dash-search input{flex:1;min-width:0}.dash-search kbd{padding:3px 7px;border:1px solid var(--border);border-radius:5px;background:var(--card-bg);color:var(--muted);font:700 9px var(--font-body)}
