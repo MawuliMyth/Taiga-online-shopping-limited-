@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { 
   BarChart3, Bell, Boxes, ChevronDown, CircleDollarSign, ImagePlus, 
   LayoutDashboard, LogOut, Package, Plus, Search, Settings, 
-  ShoppingCart, Store, Tags, Trash2, Truck, Users, Wallet, X, 
+  ShoppingCart, Store, Tags, Trash2, Truck, Users, Wallet, X, PackageCheck,
   TrendingUp, ArrowUpRight, ArrowDownRight, Edit3, ClipboardCheck,
   ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { useSessionTimeout } from "../../lib/use-session-timeout";
 import { AuthModal } from "../components/AuthModal";
 
 type Tab="Dashboard"|"Orders"|"Products"|"Customers"|"Administrators"|"Categories"|"Analytics"|"Marketing"|"Audit Logs"|"Settings";
@@ -66,6 +67,7 @@ export default function Admin(){
 
   // Quick order viewer state
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
+  useSessionTimeout(30,()=>{setEditing(null);setEditingBanner(null);setNotice("Your admin session timed out after 30 minutes of inactivity. Please sign in again.")});
 
   async function check(){
     const {data:{user}}=await supabase.auth.getUser();
@@ -249,7 +251,6 @@ export default function Admin(){
     if(String(storeSettings.store_name??"").trim().length<2) return flash("Enter a valid store name.");
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return flash("Enter a valid support email address.");
     if(!/^(?:\+234|0)(?:7[0-9]|8[0-9]|9[0-1])[0-9]{8}$/.test(phone)) return flash("Enter a valid Nigerian support phone number.");
-    if(!Number.isFinite(Number(storeSettings.free_shipping_threshold))||Number(storeSettings.free_shipping_threshold)<0) return flash("Free delivery threshold must be zero or more.");
     if(!Number.isFinite(Number(storeSettings.standard_shipping_fee))||Number(storeSettings.standard_shipping_fee)<0) return flash("Standard delivery fee must be zero or more.");
     if(!Number.isFinite(Number(storeSettings.pickup_shipping_fee))||Number(storeSettings.pickup_shipping_fee)<0) return flash("Pickup fee must be zero or more.");
     const sanitizedSettings={...storeSettings,store_name:String(storeSettings.store_name).trim(),support_email:email,support_phone:phone};
@@ -746,10 +747,6 @@ export default function Admin(){
                   <input type="tel" inputMode="tel" value={storeSettings.support_phone||""} onChange={e=>setStoreSettings({...storeSettings,support_phone:e.target.value})} required minLength={11} maxLength={18} pattern="(?:\\+234|0)(?:7[0-9]|8[0-9]|9[0-1])[0-9 ()-]{8,14}" title="Enter a valid Nigerian phone number." style={{ height: "40px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "0 12px", fontSize: "13px", background: "var(--card-bg)" }} />
                 </label>
                 
-                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 700 }}>
-                  Free delivery threshold (₦)
-                  <input type="number" min="0" max="1000000000" step="1" value={storeSettings.free_shipping_threshold||0} onChange={e=>setStoreSettings({...storeSettings,free_shipping_threshold:Number(e.target.value)})} required style={{ height: "40px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "0 12px", fontSize: "13px", background: "var(--card-bg)" }} />
-                </label>
                 <label>Standard delivery fee (NGN)<input type="number" min="0" step="1" value={storeSettings.standard_shipping_fee||0} onChange={e=>setStoreSettings({...storeSettings,standard_shipping_fee:Number(e.target.value)})} required /></label>
                 <label>Pickup fee (NGN)<input type="number" min="0" step="1" value={storeSettings.pickup_shipping_fee||0} onChange={e=>setStoreSettings({...storeSettings,pickup_shipping_fee:Number(e.target.value)})} required /></label>
               </div>
@@ -794,7 +791,7 @@ export default function Admin(){
       </div>
     </main>
 
-    {editing&&<ProductEditor item={editing} categories={categories} close={()=>setEditing(null)} submit={saveProduct} upload={uploadImage}/>} 
+    {editing&&<ProductEditor item={editing} categories={categories} notice={notice} close={()=>setEditing(null)} submit={saveProduct} upload={uploadImage}/>}
     {editingBanner&&<BannerEditor item={editingBanner} close={()=>setEditingBanner(null)} submit={saveBanner} upload={uploadImage}/>}
     
     {/* Collapsible Order Detail Popup */}
@@ -1000,7 +997,7 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
   </div>
 }
 
-function ProductEditor({item,categories,close,submit,upload}:{item:any;categories:any[];close:()=>void;submit:(e:React.FormEvent<HTMLFormElement>)=>void;upload:(f:File,set:(u:string)=>void)=>void}){
+function ProductEditor({item,categories,notice,close,submit,upload}:{item:any;categories:any[];notice:string;close:()=>void;submit:(e:React.FormEvent<HTMLFormElement>)=>void;upload:(f:File,set:(u:string)=>void)=>void}){
   const [gallery,setGallery]=useState<string[]>(item.product_images?.sort((a:any,b:any)=>a.sort_order-b.sort_order).map((i:any)=>i.image_url)??(item.image_url?[item.image_url]:[]));
   const [variants,setVariants]=useState<any[]>(Array.isArray(item.variants)?item.variants:[]);
   const [variantAttributes,setVariantAttributes]=useState<string[]>(()=>Array.from(new Set((Array.isArray(item.variants)?item.variants:[]).flatMap((variant:any)=>Object.keys(variant.options||{})))) as string[]);
@@ -1025,13 +1022,14 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
   });
   const [selectedCategory,setSelectedCategory]=useState(String(item.category_id||""));
   const [hasWarranty,setHasWarranty]=useState(Boolean(Number(item.warranty_value||0)>0||item.warranty_notes));
+  const [validationMessage,setValidationMessage]=useState("");
   const [specifications,setSpecifications]=useState<{name:string;value:string}[]>(Object.entries(sourceSpecifications).filter(([name])=>!fixedSpecificationNames.includes(name)).map(([name,value])=>({name,value:String(value)})));
   const addVariant=()=>setVariants(current=>[...current,{id:crypto.randomUUID(),options:Object.fromEntries(variantAttributes.map(name=>[name,""])),sku:"",price:"",discounted_price:"",inventory:0,image_url:""}]);
   const setPreset=(type:"fashion"|"shoes"|"phone"|"watch")=>{
     const presets={
       fashion:{attributes:["Size","Colour"],rows:["S","M","L","XL"].flatMap(Size=>["Black","White"].map(Colour=>({Size,Colour}))),prefix:"FAS"},
       shoes:{attributes:["Shoe Size","Colour"],rows:["39","40","41","42","43","44"].flatMap(size=>["Black","Brown"].map(Colour=>({"Shoe Size":size,Colour}))),prefix:"SHO"},
-      phone:{attributes:["Operating System","Storage","Colour"],rows:["Android","iOS"].flatMap(OperatingSystem=>["128 GB","256 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({"Operating System":OperatingSystem,Storage,Colour})))),prefix:"PHN"},
+      phone:{attributes:["Storage","Colour"],rows:["128 GB","256 GB","512 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({Storage,Colour}))),prefix:"PHN"},
       watch:{attributes:["Case Size","Strap Material","Colour"],rows:["40 mm","44 mm"].flatMap(size=>["Silicone","Leather"].map(material=>({"Case Size":size,"Strap Material":material,Colour:"Black"}))),prefix:"WAT"}
     },preset=presets[type];
     setVariantAttributes(preset.attributes);
@@ -1080,7 +1078,19 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
   };
   
   return <div className="modal-overlay">
-    <form className="product-editor animate-scale-up" onSubmit={submit}>
+    <form className="product-editor animate-scale-up" noValidate onInvalid={event=>event.preventDefault()} onSubmit={event=>{
+      if(!event.currentTarget.checkValidity()){
+        event.preventDefault();
+        const invalid=event.currentTarget.querySelector<HTMLElement>(":invalid");
+        const label=invalid?.closest("label")?.childNodes[0]?.textContent?.trim()||"A required field";
+        setValidationMessage(`${label} needs your attention before this product can be saved.`);
+        invalid?.scrollIntoView({behavior:"smooth",block:"center"});
+        window.setTimeout(()=>invalid?.focus(),250);
+        return;
+      }
+      setValidationMessage("");
+      submit(event);
+    }}>
       <input type="hidden" name="gallery_urls" value={JSON.stringify(gallery)}/>
       <input type="hidden" name="variants" value={JSON.stringify(variants.map(variant=>({...variant,options:Object.fromEntries(Object.entries(variant.options||{}).filter(([,value])=>String(value).trim()))})))}/>
       <input type="hidden" name="specifications" value={JSON.stringify({...Object.fromEntries(specifications.filter(spec=>spec.name.trim()&&spec.value.trim()).map(spec=>[spec.name.trim(),spec.value.trim()])),...Object.fromEntries(Object.entries(productDetails).filter(([,value])=>value.trim()))})}/>
@@ -1091,6 +1101,7 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
       <div className="product-editor-steps" aria-label="Product setup sections">
         <span><b>1</b> Product details</span><span><b>2</b> Media & policies</span><span><b>3</b> Variants & stock</span><span><b>4</b> Publish</span>
       </div>
+      {(validationMessage||notice)&&<div className="product-form-error" role="alert"><AlertCircle/><span><b>Product not ready to save</b><small>{validationMessage||notice}</small></span><button type="button" onClick={()=>setValidationMessage("")} aria-label="Dismiss validation message"><X/></button></div>}
       <div className="editor-grid">
         <section className="full konga-form-section">
           <div className="konga-section-heading"><strong>Product category</strong><small>Choose the closest category and product type.</small></div>
@@ -1166,8 +1177,9 @@ function ProductEditor({item,categories,close,submit,upload}:{item:any;categorie
             <label>Bulk price<input type="number" min="0" step=".01" value={productDetails["Bulk Price"]} onChange={e=>setProductDetails(current=>({...current,"Bulk Price":e.target.value}))} placeholder="Optional"/></label>
             <label>Colour <span className="required">*</span><select value={productDetails.Colour} onChange={e=>setProductDetails(current=>({...current,Colour:e.target.value}))} required><option value="">Select one</option>{["Black","Blue","Brown","Gold","Green","Grey","Multi-colour","Orange","Pink","Purple","Red","Silver","White","Yellow","Not applicable"].map(value=><option key={value}>{value}</option>)}</select></label>
             <label>Gender <span className="required">*</span><select value={productDetails.Gender} onChange={e=>setProductDetails(current=>({...current,Gender:e.target.value}))} required><option value="">Select one</option><option>Female</option><option>Male</option><option>Unisex</option><option>Kids</option><option>Not applicable</option></select></label>
-            <label>Condition <span className="required">*</span><select value={productDetails.Condition} onChange={e=>setProductDetails(current=>({...current,Condition:e.target.value}))} required><option>New</option><option>Refurbished</option><option>Used - like new</option><option>Used - good</option></select></label>
+            <label>Condition <span className="required">*</span><select value={productDetails.Condition} onChange={e=>setProductDetails(current=>({...current,Condition:e.target.value}))} required><option>New</option><option>Refurbished</option><option>Drift</option><option>Preowned</option><option>Used - like new</option><option>Used - good</option></select></label>
           </div>
+          {productDetails["Return Policy"]!=="No Returns"&&<div className="return-conditions"><PackageCheck/><div><strong>Return conditions applied to this product</strong><ul><li>Item must be unused, undamaged and resellable.</li><li>Original packaging, accessories, manuals and tags must be included.</li><li>Item must be returned within the selected return window.</li></ul><small>Used, damaged or tampered items do not qualify for a refund.</small></div></div>}
           <input type="hidden" name="returnable" value={productDetails["Return Policy"]==="No Returns"?"no":"yes"}/>
         </section>
         <section className="full image-upload product-image-uploader">

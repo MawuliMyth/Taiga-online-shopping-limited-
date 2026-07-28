@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import { 
   ArrowLeft, BadgeCheck, CheckCircle2, ChevronLeft, ChevronRight, 
   Heart, MapPin, MessageCircle, Minus, PackageCheck, Plus, Share2, 
-  ShieldCheck, ShoppingCart, Star, Truck, ShieldAlert, Award
+  ShieldCheck, ShoppingCart, Star, Truck, ShieldAlert, Award, X
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
+import { useSessionTimeout } from "../../../lib/use-session-timeout";
 import { AuthModal } from "../../components/AuthModal";
 
 const money=(n:number)=>`₦${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -30,11 +31,14 @@ export default function ProductPage(){
         [reviews,setReviews]=useState<any[]>([]),
         [canReview,setCanReview]=useState(false),
         [reviewRating,setReviewRating]=useState(5),
-        [reviewBusy,setReviewBusy]=useState(false);
+        [reviewBusy,setReviewBusy]=useState(false),
+        [zoomOpen,setZoomOpen]=useState(false);
+  useSessionTimeout(60,()=>{setAuthReason("Your session timed out after 60 minutes of inactivity. Please sign in again.");setAuth(true)});
 
   // Product page enhancements states
   const [activeTab, setActiveTab] = useState<"details" | "specs" | "warranty">("details");
   const [showStickyBar, setShowStickyBar] = useState(false);
+  const zoomImageCount=Math.max(1,product?.product_images?.length||1);
 
   useEffect(()=>{
     if(!slug){setLoading(false);return};
@@ -88,6 +92,17 @@ export default function ProductPage(){
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  useEffect(()=>{
+    if(!zoomOpen)return;
+    const keydown=(event:KeyboardEvent)=>{
+      if(event.key==="Escape")setZoomOpen(false);
+      if(event.key==="ArrowLeft")setImageIndex(index=>(index-1+zoomImageCount)%zoomImageCount);
+      if(event.key==="ArrowRight")setImageIndex(index=>(index+1)%zoomImageCount);
+    };
+    window.addEventListener("keydown",keydown);
+    return()=>window.removeEventListener("keydown",keydown);
+  },[zoomOpen,zoomImageCount]);
 
   async function add(){
     const variants=Array.isArray(product.variants)?product.variants.filter((variant:any)=>variant.active!==false):[];
@@ -184,11 +199,12 @@ export default function ProductPage(){
       <section className="product-overview">
         <div className="product-gallery">
           <span>{product.badge}</span>
-          <div className="carousel-stage">
+          <div className="carousel-stage" role="button" tabIndex={0} aria-label={`Zoom product image ${imageIndex+1} of ${images.length}`} onClick={()=>setZoomOpen(true)} onKeyDown={event=>(event.key==="Enter"||event.key===" ")&&setZoomOpen(true)}>
             <img src={images[imageIndex]} alt={`${product.name} image ${imageIndex+1}`}/>
+            <small className="carousel-counter">{imageIndex+1}/{images.length}</small>
             {images.length>1&&<>
-              <button className="carousel-prev" onClick={()=>setImageIndex(i=>(i-1+images.length)%images.length)} aria-label="Previous image"><ChevronLeft/></button>
-              <button className="carousel-next" onClick={()=>setImageIndex(i=>(i+1)%images.length)} aria-label="Next image"><ChevronRight/></button>
+              <button className="carousel-prev" onClick={event=>{event.stopPropagation();setImageIndex(i=>(i-1+images.length)%images.length)}} aria-label="Previous image"><ChevronLeft/></button>
+              <button className="carousel-next" onClick={event=>{event.stopPropagation();setImageIndex(i=>(i+1)%images.length)}} aria-label="Next image"><ChevronRight/></button>
             </>}
           </div>
           {images.length>1&&<div className="carousel-thumbs">
@@ -203,7 +219,7 @@ export default function ProductPage(){
         <div className="product-info">
           <div className="product-flags">
             <span><BadgeCheck/> Official store</span>
-            <span><Truck/> Free delivery over ₦50,000</span>
+            <span><Truck/> Nationwide delivery</span>
           </div>
           
           <h1 style={{ fontSize: "28px", fontWeight: 800, marginTop: "16px", color: "var(--foreground)" }}>{product.name}</h1>
@@ -319,7 +335,7 @@ export default function ProductPage(){
 
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
                 <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><Truck size={14} /> Return eligibility</h3>
-                <p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>{product.returnable!==false?"This product is eligible for return within 7 days of delivery. It must be unused, complete and in its original packaging.":"This product is not returnable. Any applicable seller warranty shown alongside still remains valid."}</p>
+                {product.returnable!==false?<><p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>To qualify for a return, this item must:</p><ul className="product-return-list"><li>Be unused, undamaged and in resellable condition</li><li>Include all original packaging, accessories, manuals and tags</li><li>Be returned within the applicable return window</li></ul><p className="return-warning">Items showing use, damage or tampering do not qualify for a refund.</p></>:<p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>This product is not returnable. Any applicable seller warranty shown alongside still remains valid.</p>}
               </article>
             </div>
           )}
@@ -382,6 +398,8 @@ export default function ProductPage(){
         </div>
       </section>
     </main>
+
+    {zoomOpen&&<div className="product-lightbox" role="dialog" aria-modal="true" aria-label={`${product.name} image viewer`} onMouseDown={event=>event.target===event.currentTarget&&setZoomOpen(false)}><button className="lightbox-close" onClick={()=>setZoomOpen(false)} aria-label="Close image viewer"><X/></button><div className="lightbox-stage"><img src={images[imageIndex]} alt={`${product.name} enlarged image ${imageIndex+1}`}/><strong>{imageIndex+1}/{images.length}</strong>{images.length>1&&<><button className="lightbox-prev" onClick={()=>setImageIndex(index=>(index-1+images.length)%images.length)} aria-label="Previous image"><ChevronLeft/></button><button className="lightbox-next" onClick={()=>setImageIndex(index=>(index+1)%images.length)} aria-label="Next image"><ChevronRight/></button></>}</div>{images.length>1&&<div className="lightbox-thumbs">{images.map((url:string,index:number)=><button className={imageIndex===index?"active":""} onClick={()=>setImageIndex(index)} key={`${url}-zoom-${index}`} aria-label={`View image ${index+1}`}><img src={url} alt=""/></button>)}</div>}</div>}
 
     {/* Mobile Sticky Checkout Action Bar */}
     {showStickyBar && (
