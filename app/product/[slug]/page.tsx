@@ -12,6 +12,7 @@ import { useSessionTimeout } from "../../../lib/use-session-timeout";
 import { AuthModal } from "../../components/AuthModal";
 
 const money=(n:number)=>`₦${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const hiddenCustomerOptions=new Set(["Operating System"]);
 
 export default function ProductPage(){
   const pathname=usePathname(),
@@ -107,8 +108,10 @@ export default function ProductPage(){
   async function add(){
     const variants=Array.isArray(product.variants)?product.variants.filter((variant:any)=>variant.active!==false):[];
     const optionNames=Array.from(new Set(variants.flatMap((variant:any)=>Object.keys(variant.options||{})))) as string[];
-    const selectedVariant=variants.find((variant:any)=>optionNames.every(name=>variant.options?.[name]===selectedOptions[name]));
-    if(variants.length&&!selectedVariant){setNotice(`Choose ${optionNames.filter(name=>!selectedOptions[name]).join(", ")||"an available combination"} before adding to cart`);setTimeout(()=>setNotice(""),3000);return}
+    const customerOptionNames=optionNames.filter(name=>!hiddenCustomerOptions.has(name));
+    const matches=variants.filter((variant:any)=>customerOptionNames.every(name=>variant.options?.[name]===selectedOptions[name]));
+    const selectedVariant=matches.find((variant:any)=>Number(variant.inventory)>0)??matches[0];
+    if(variants.length&&!selectedVariant){setNotice(`Choose ${customerOptionNames.filter(name=>!selectedOptions[name]).join(", ")||"an available combination"} before adding to cart`);setTimeout(()=>setNotice(""),3000);return}
     const available=selectedVariant?Number(selectedVariant.inventory):Number(product.inventory);
     if(available<1){setNotice("This selection is currently out of stock");setTimeout(()=>setNotice(""),2500);return}
     const {data:{user}}=await supabase.auth.getUser();
@@ -181,7 +184,9 @@ export default function ProductPage(){
 
   const variants=Array.isArray(product.variants)?product.variants.filter((variant:any)=>variant.active!==false):[],
         optionNames=Array.from(new Set(variants.flatMap((variant:any)=>Object.keys(variant.options||{})))) as string[],
-        selectedVariant=variants.find((variant:any)=>optionNames.every(name=>variant.options?.[name]===selectedOptions[name])),
+        customerOptionNames=optionNames.filter(name=>!hiddenCustomerOptions.has(name)),
+        matchingVariants=variants.filter((variant:any)=>customerOptionNames.every(name=>variant.options?.[name]===selectedOptions[name])),
+        selectedVariant=matchingVariants.find((variant:any)=>Number(variant.inventory)>0)??matchingVariants[0],
         price=Number(selectedVariant?.price??product.price),
         old=Number(product.compare_at_price??price),
         discount=old>price?Math.round((old-price)/old*100):0,
@@ -244,7 +249,7 @@ export default function ProductPage(){
             <a href="#reviews" style={{ color: "var(--primary)", fontWeight: "650" }}>{reviews.length?`${averageRating} · ${reviews.length} verified customer review${reviews.length===1?"":"s"}`:"No customer ratings yet"}</a>
           </div>
 
-          {variants.length>0&&<div className="product-options" aria-label="Product options">{optionNames.map(optionName=>{
+          {variants.length>0&&<div className="product-options" aria-label="Product options">{customerOptionNames.map(optionName=>{
             const values=Array.from(new Set(variants.map((variant:any)=>variant.options?.[optionName]).filter(Boolean))) as string[];
             return <fieldset key={optionName}><legend>{optionName} <span>{selectedOptions[optionName]||"Select one"}</span></legend><div>{values.map(value=>{
               const possible=variants.some((variant:any)=>variant.options?.[optionName]===value&&Object.entries(selectedOptions).every(([key,selected])=>key===optionName||!selected||variant.options?.[key]===selected)&&Number(variant.inventory)>0);

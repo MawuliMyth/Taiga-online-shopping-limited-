@@ -1029,7 +1029,7 @@ function ProductEditor({item,categories,notice,close,submit,upload}:{item:any;ca
     const presets={
       fashion:{attributes:["Size","Colour"],rows:["S","M","L","XL"].flatMap(Size=>["Black","White"].map(Colour=>({Size,Colour}))),prefix:"FAS"},
       shoes:{attributes:["Shoe Size","Colour"],rows:["39","40","41","42","43","44"].flatMap(size=>["Black","Brown"].map(Colour=>({"Shoe Size":size,Colour}))),prefix:"SHO"},
-      phone:{attributes:["Storage","Colour"],rows:["128 GB","256 GB","512 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({Storage,Colour}))),prefix:"PHN"},
+      phone:{attributes:["Operating System","Storage","Colour"],rows:["Android","iOS"].flatMap(OperatingSystem=>["128 GB","256 GB","512 GB"].flatMap(Storage=>["Black","Blue","White"].map(Colour=>({"Operating System":OperatingSystem,Storage,Colour})))),prefix:"PHN"},
       watch:{attributes:["Case Size","Strap Material","Colour"],rows:["40 mm","44 mm"].flatMap(size=>["Silicone","Leather"].map(material=>({"Case Size":size,"Strap Material":material,Colour:"Black"}))),prefix:"WAT"}
     },preset=presets[type];
     setVariantAttributes(preset.attributes);
