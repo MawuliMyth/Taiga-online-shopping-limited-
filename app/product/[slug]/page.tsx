@@ -312,7 +312,7 @@ export default function ProductPage(){
           )}
 
           {activeTab === "specs" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+            <div className="product-tab-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
                 <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><Award size={14} /> Product specifications</h3>
                 {Object.keys(product.specifications||{}).length?<dl className="product-spec-list">{Object.entries(product.specifications).map(([name,value])=><div key={name}><dt>{name}</dt><dd>{String(value)}</dd></div>)}</dl>:<p style={{fontSize:12,color:"var(--muted)"}}>No additional specifications have been published for this product.</p>}
@@ -331,7 +331,7 @@ export default function ProductPage(){
           )}
 
           {activeTab === "warranty" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+            <div className="product-tab-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
                 <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><ShieldCheck size={14} /> Warranty Terms</h3>
                 <p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>{Number(product.warranty_value)>0?`This product includes a ${product.warranty_value}-${String(product.warranty_unit||"months").replace(/s$/,'')} warranty from the purchase date.`:"No seller warranty is provided for this product."}</p>
@@ -349,7 +349,7 @@ export default function ProductPage(){
 
       {related.length>0&&<section className="related-section" id="related" style={{ marginTop: "32px" }}>
         <h2>Customers who viewed this also viewed</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px" }}>
+        <div className="related-products-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px" }}>
           {related.map(r=><Link href={`/product/${r.slug}`} key={r.id} style={{ display: "flex", flexDirection: "column", gap: "8px" }} className="related-card">
             <img src={r.image_url} alt="" style={{ width: "100%", height: "140px", objectFit: "contain", padding:"10px", borderRadius: "var(--radius-md)", background: "white" }} />
             <strong style={{ fontSize: "13px", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</strong>
