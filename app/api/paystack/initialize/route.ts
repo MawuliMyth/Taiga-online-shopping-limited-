@@ -5,6 +5,7 @@ export async function POST(request:Request){
     const user=await authenticatedUser(request);
     const {delivery_method}=await request.json() as {delivery_method?:string};
     if(!user.email) throw new Error("Your account needs an email address.");
+    if(delivery_method!=="standard") throw new Error("Only standard delivery is available.");
     const {admin}=serverClients();
     const {data:quote,error:quoteError}=await admin.rpc("checkout_quote_for_user",{target_user:user.id,delivery_method});
     if(quoteError) throw new Error(quoteError.message);

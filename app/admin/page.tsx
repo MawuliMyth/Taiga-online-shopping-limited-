@@ -57,7 +57,6 @@ export default function Admin(){
     support_phone:"0800 466 3639",
     free_shipping_threshold:50000,
     standard_shipping_fee:2500,
-    pickup_shipping_fee:1500,
     announcement_left:"",
     announcement_center:"",
     announcement_right:"",
@@ -251,8 +250,7 @@ export default function Admin(){
     if(String(storeSettings.store_name??"").trim().length<2) return flash("Enter a valid store name.");
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return flash("Enter a valid support email address.");
     if(!/^(?:\+234|0)(?:7[0-9]|8[0-9]|9[0-1])[0-9]{8}$/.test(phone)) return flash("Enter a valid Nigerian support phone number.");
-    if(!Number.isFinite(Number(storeSettings.standard_shipping_fee))||Number(storeSettings.standard_shipping_fee)<0) return flash("Standard delivery fee must be zero or more.");
-    if(!Number.isFinite(Number(storeSettings.pickup_shipping_fee))||Number(storeSettings.pickup_shipping_fee)<0) return flash("Pickup fee must be zero or more.");
+    if(!Number.isFinite(Number(storeSettings.standard_shipping_fee))||Number(storeSettings.standard_shipping_fee)<2500) return flash("Standard delivery must start from ₦2,500.");
     const sanitizedSettings={...storeSettings,store_name:String(storeSettings.store_name).trim(),support_email:email,support_phone:phone};
     setStoreSettings(sanitizedSettings);
     const {error}=await supabase.from("store_settings").update({...sanitizedSettings,updated_at:new Date().toISOString()}).eq("id",1);
@@ -743,12 +741,11 @@ export default function Admin(){
                 </label>
                 
                 <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 700 }}>
-                  Support phone
+                  Business WhatsApp / support number
                   <input type="tel" inputMode="tel" value={storeSettings.support_phone||""} onChange={e=>setStoreSettings({...storeSettings,support_phone:e.target.value})} required minLength={11} maxLength={18} pattern="(?:\\+234|0)(?:7[0-9]|8[0-9]|9[0-1])[0-9 ()-]{8,14}" title="Enter a valid Nigerian phone number." style={{ height: "40px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "0 12px", fontSize: "13px", background: "var(--card-bg)" }} />
                 </label>
                 
-                <label>Standard delivery fee (NGN)<input type="number" min="0" step="1" value={storeSettings.standard_shipping_fee||0} onChange={e=>setStoreSettings({...storeSettings,standard_shipping_fee:Number(e.target.value)})} required /></label>
-                <label>Pickup fee (NGN)<input type="number" min="0" step="1" value={storeSettings.pickup_shipping_fee||0} onChange={e=>setStoreSettings({...storeSettings,pickup_shipping_fee:Number(e.target.value)})} required /></label>
+                <label>Standard delivery fee (NGN) — starts from ₦2,500<input type="number" min="2500" step="1" value={storeSettings.standard_shipping_fee||2500} onChange={e=>setStoreSettings({...storeSettings,standard_shipping_fee:Number(e.target.value)})} required /></label>
               </div>
 
               <hr style={{ border: 0, borderTop: "1px solid var(--border)" }} />
@@ -1179,7 +1176,7 @@ function ProductEditor({item,categories,notice,close,submit,upload}:{item:any;ca
             <label>Gender <span className="required">*</span><select value={productDetails.Gender} onChange={e=>setProductDetails(current=>({...current,Gender:e.target.value}))} required><option value="">Select one</option><option>Female</option><option>Male</option><option>Unisex</option><option>Kids</option><option>Not applicable</option></select></label>
             <label>Condition <span className="required">*</span><select value={productDetails.Condition} onChange={e=>setProductDetails(current=>({...current,Condition:e.target.value}))} required><option>New</option><option>Refurbished</option><option>Drift</option><option>Preowned</option><option>Used - like new</option><option>Used - good</option></select></label>
           </div>
-          {productDetails["Return Policy"]!=="No Returns"&&<div className="return-conditions"><PackageCheck/><div><strong>Return conditions applied to this product</strong><ul><li>Item must be unused, undamaged and resellable.</li><li>Original packaging, accessories, manuals and tags must be included.</li><li>Item must be returned within the selected return window.</li></ul><small>Used, damaged or tampered items do not qualify for a refund.</small></div></div>}
+          {productDetails["Return Policy"]!=="No Returns"&&<div className="return-conditions"><PackageCheck/><div><strong>Return conditions applied to this product</strong><ul><li>Item must be undamaged and resellable.</li><li>Original packaging, accessories, manuals and tags must be included.</li><li>Item must be returned within the selected return window.</li></ul><small>Damaged or tampered items do not qualify for a refund.</small></div></div>}
           <input type="hidden" name="returnable" value={productDetails["Return Policy"]==="No Returns"?"no":"yes"}/>
         </section>
         <section className="full image-upload product-image-uploader">

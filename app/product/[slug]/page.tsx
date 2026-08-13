@@ -13,6 +13,7 @@ import { AuthModal } from "../../components/AuthModal";
 
 const money=(n:number)=>`₦${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const hiddenCustomerOptions=new Set(["Operating System"]);
+const whatsappUrl=(phone:string)=>{const digits=phone.replace(/\D/g,"");const international=digits.startsWith("0")?`234${digits.slice(1)}`:digits;return `https://wa.me/${international}?text=${encodeURIComponent("Hello Taiga, I need help with this product.")}`};
 
 export default function ProductPage(){
   const pathname=usePathname(),
@@ -33,7 +34,8 @@ export default function ProductPage(){
         [canReview,setCanReview]=useState(false),
         [reviewRating,setReviewRating]=useState(5),
         [reviewBusy,setReviewBusy]=useState(false),
-        [zoomOpen,setZoomOpen]=useState(false);
+        [zoomOpen,setZoomOpen]=useState(false),
+        [cartCount,setCartCount]=useState(0);
   useSessionTimeout(60,()=>{setAuthReason("Your session timed out after 60 minutes of inactivity. Please sign in again.");setAuth(true)});
 
   // Product page enhancements states
@@ -81,6 +83,19 @@ export default function ProductPage(){
     return()=>window.removeEventListener("focus",loadSupportPhone);
   },[]);
 
+  useEffect(()=>{
+    const refreshCartCount=async()=>{
+      const {data:{user}}=await supabase.auth.getUser();
+      if(!user){setCartCount(0);return}
+      const {data}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id);
+      setCartCount(data?.reduce((sum,row)=>sum+Number(row.quantity||0),0)??0);
+    };
+    refreshCartCount();
+    window.addEventListener("focus",refreshCartCount);
+    const {data:{subscription}}=supabase.auth.onAuthStateChange(()=>refreshCartCount());
+    return()=>{window.removeEventListener("focus",refreshCartCount);subscription.unsubscribe()};
+  },[]);
+
   // Monitor scroll for mobile sticky checkout bar
   useEffect(() => {
     const handleScroll = () => {
@@ -122,11 +137,18 @@ export default function ProductPage(){
     }
     const variantKey=selectedVariant?.id||"default";
     const selectedVariantSnapshot=selectedVariant?{id:selectedVariant.id,sku:selectedVariant.sku||null,options:selectedVariant.options,price:selectedVariant.price??product.price,image_url:selectedVariant.image_url||null}:null;
+    const previousCount=cartCount;
+    setCartCount(current=>current+Math.min(qty,available));
     const {data:row}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id).eq("product_id",product.id).eq("variant_key",variantKey).maybeSingle();
     const result=row
       ? await supabase.from("cart_items").update({quantity:Math.min(row.quantity+qty,available),selected_variant:selectedVariantSnapshot}).eq("user_id",user.id).eq("product_id",product.id).eq("variant_key",variantKey)
       : await supabase.from("cart_items").insert({user_id:user.id,product_id:product.id,variant_key:variantKey,selected_variant:selectedVariantSnapshot,quantity:Math.min(qty,available)});
-    setNotice(result.error?result.error.message:`${qty} item${qty>1?"s":""} added to cart`);
+    if(result.error){setCartCount(previousCount);setNotice(result.error.message);}
+    else{
+      const {data:cartRows}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id);
+      setCartCount(cartRows?.reduce((sum,item)=>sum+Number(item.quantity||0),0)??0);
+      setNotice(`${qty} item${qty>1?"s":""} added to cart`);
+    }
     setTimeout(()=>setNotice(""),2500);
   }
 
@@ -197,7 +219,7 @@ export default function ProductPage(){
         ratingDistribution=[5,4,3,2,1].map(stars=>({stars,pct:reviews.length?Math.round(reviews.filter(review=>Number(review.rating)===stars).length/reviews.length*100):0}));
 
   return <div className="product-page">{auth&&<AuthModal reason={authReason} onClose={()=>setAuth(false)}/>} {notice&&<div className="toast">{notice}</div>}
-    <header className="product-top"><Link href="/" className="logo"><span>T</span>Taiga<small>MARKET</small></Link><Link href="/"><ArrowLeft/> Continue shopping</Link><Link href="/?panel=cart"><ShoppingCart/> Cart</Link></header>
+    <header className="product-top"><Link href="/" className="logo"><span>T</span>Taiga<small>MARKET</small></Link><Link href="/"><ArrowLeft/> Continue shopping</Link><Link href="/account/cart" className="product-cart-link" aria-label={`Cart${cartCount>0?`, ${cartCount} item${cartCount===1?"":"s"}`:""}`}><ShoppingCart/> Cart{cartCount>0&&<b data-count={cartCount}>{cartCount}</b>}</Link></header>
     <main className="product-wrap">
       <nav className="breadcrumbs"><Link href="/">Home</Link><span>›</span><Link href="/#categories">{product.categories?.name}</Link><span>›</span><b>{product.name}</b></nav>
       
@@ -270,7 +292,7 @@ export default function ProductPage(){
             <MessageCircle style={{ color: "var(--primary)" }} />
             <div>
               <span style={{ fontWeight: 700, fontSize: "13px", color: "var(--foreground)" }}>Need help placing your order?</span>
-              <small style={{ display: "block", color: "var(--muted)", marginTop: "2px" }}>Call or WhatsApp {supportPhone}</small>
+              <a href={whatsappUrl(supportPhone)} target="_blank" rel="noreferrer" style={{ display: "block", color: "var(--primary)", marginTop: "2px", fontSize:"12px", fontWeight:700 }}>Chat with the owner on WhatsApp · {supportPhone}</a>
             </div>
           </div>
         </div>
@@ -340,7 +362,7 @@ export default function ProductPage(){
 
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
                 <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><Truck size={14} /> Return eligibility</h3>
-                {product.returnable!==false?<><p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>To qualify for a return, this item must:</p><ul className="product-return-list"><li>Be unused, undamaged and in resellable condition</li><li>Include all original packaging, accessories, manuals and tags</li><li>Be returned within the applicable return window</li></ul><p className="return-warning">Items showing use, damage or tampering do not qualify for a refund.</p></>:<p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>This product is not returnable. Any applicable seller warranty shown alongside still remains valid.</p>}
+                {product.returnable!==false?<><p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>To qualify for a return, this item must:</p><ul className="product-return-list"><li>Be undamaged and in resellable condition</li><li>Include all original packaging, accessories, manuals and tags</li><li>Be returned within the applicable return window</li></ul><p className="return-warning">Items showing damage or tampering do not qualify for a refund.</p></>:<p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>This product is not returnable. Any applicable seller warranty shown alongside still remains valid.</p>}
               </article>
             </div>
           )}

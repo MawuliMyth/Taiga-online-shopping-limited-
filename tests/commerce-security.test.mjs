@@ -7,6 +7,7 @@ const variantMigration=await readFile(new URL("../supabase/migrations/2026072000
 const reviewMigration=await readFile(new URL("../supabase/migrations/202607200002_verified_customer_reviews.sql",import.meta.url),"utf8");
 const merchandisingMigration=await readFile(new URL("../supabase/migrations/202607220001_product_merchandising.sql",import.meta.url),"utf8");
 const paidDeliveryMigration=await readFile(new URL("../supabase/migrations/202607280001_remove_free_delivery.sql",import.meta.url),"utf8");
+const deliveryOnlyMigration=await readFile(new URL("../supabase/migrations/202608130001_delivery_only.sql",import.meta.url),"utf8");
 const initializeRoute=await readFile(new URL("../app/api/paystack/initialize/route.ts",import.meta.url),"utf8");
 const verifyRoute=await readFile(new URL("../app/api/paystack/verify/route.ts",import.meta.url),"utf8");
 
@@ -34,8 +35,9 @@ test("delivery pricing comes from store settings",()=>{
   assert.match(migration,/settings\.standard_shipping_fee/);
 });
 
-test("standard and pickup delivery remain paid at every cart value",()=>{
-  assert.match(paidDeliveryMigration,/delivery_method='pickup' then settings\.pickup_shipping_fee else settings\.standard_shipping_fee/i);
+test("checkout supports paid doorstep delivery only, starting from 2500",()=>{
+  assert.match(deliveryOnlyMigration,/delivery_method<>'standard'/i);
+  assert.match(deliveryOnlyMigration,/greatest\(settings\.standard_shipping_fee,2500\)/i);
   assert.doesNotMatch(paidDeliveryMigration,/subtotal>=settings\.free_shipping_threshold/i);
 });
 

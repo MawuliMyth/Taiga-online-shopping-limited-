@@ -5,12 +5,13 @@ import type { User } from "@supabase/supabase-js";
 import { 
   Check, CheckCircle2, CreditCard, Heart, Minus, Package, Plus, 
   ShieldCheck, ShoppingCart, Trash2, X, Clock, Truck, PackageCheck, 
-  ClipboardCheck, ChevronDown, ChevronUp, AlertCircle, UserRound, Mail
+  ClipboardCheck, ChevronDown, ChevronUp, AlertCircle, UserRound, Mail, MessageCircle
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { nigeriaCities, nigeriaStates } from "../data/nigeriaLocations";
 
 type CartRow={product_id:string;variant_key:string;selected_variant:any;quantity:number;products:{name:string;slug:string;price:number;image_url:string;inventory:number;variants:any[]}|null};
+const whatsappNumber=(phone:string)=>{const digits=String(phone||"").replace(/\D/g,"");return digits.startsWith("0")?`234${digits.slice(1)}`:digits};
 const money=(value:number)=>`₦${value.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
 function addressInputRules(key:string){
@@ -26,12 +27,14 @@ declare global { interface Window { PaystackPop?:new()=>{resumeTransaction:(acce
 export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist"|"orders"|"account"|"inbox";user:User;onClose:()=>void;onChanged:()=>void}){
   const router=useRouter();
   const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[checkout,setCheckout]=useState(false),[step,setStep]=useState(1),[done,setDone]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[addressError,setAddressError]=useState("");
+  const [supportPhone,setSupportPhone]=useState(""),[whatsappOrder,setWhatsappOrder]=useState("");
   const [address,setAddress]=useState({first_name:"",last_name:"",phone:"",additional_phone:"",line1:"",additional_info:"",state:"",city:""});
-  const [delivery,setDelivery]=useState<""|"standard"|"pickup">("");
-  const [deliverySettings,setDeliverySettings]=useState({free_shipping_threshold:50000,standard_shipping_fee:2500,pickup_shipping_fee:1500});
+  const [delivery,setDelivery]=useState<""|"standard">("");
+  const [deliverySettings,setDeliverySettings]=useState({standard_shipping_fee:2500});
   
   // Track expanded order row for detailed timeline
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const cartItemCount=kind==="cart"?rows.reduce((sum,row)=>sum+Number(row.quantity||0),0):0;
 
   function validateAddress(){
     const namePattern=/^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[ '\-][A-Za-zÀ-ÖØ-öø-ÿ]+)*$/u;
@@ -47,8 +50,8 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
 
   async function load(){
     setLoading(true);
-    const settingsResult=await supabase.from("store_settings").select("free_shipping_threshold,standard_shipping_fee,pickup_shipping_fee").eq("id",1).maybeSingle();
-    if(settingsResult.data)setDeliverySettings(settingsResult.data);
+    const settingsResult=await supabase.from("store_settings").select("standard_shipping_fee,support_phone").eq("id",1).maybeSingle();
+    if(settingsResult.data){setDeliverySettings({standard_shipping_fee:settingsResult.data.standard_shipping_fee});setSupportPhone(settingsResult.data.support_phone||"")}
     if(kind==="account"){
       const {data}=await supabase.from("profiles").select("full_name,email,created_at").eq("id",user.id).maybeSingle();
       setRows([{...(data??{}),email:data?.email||user.email,full_name:data?.full_name||user.user_metadata?.full_name||"Taiga customer"}]);
@@ -136,7 +139,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
       setBusy(false);
       const popup=new window.PaystackPop();
       popup.resumeTransaction(initialized.access_code);
-      const poll=window.setInterval(async()=>{const response=await fetch("/api/paystack/verify",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({reference:initialized.reference,address:{...address,country:"Nigeria",delivery_method:delivery,payment_method:"paystack",payment_reference:initialized.reference}})});if(response.ok){window.clearInterval(poll);const result=await response.json();setDone(result.order.order_number);setCheckout(false);await load();onChanged()}},2500);
+      const poll=window.setInterval(async()=>{const response=await fetch("/api/paystack/verify",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({reference:initialized.reference,address:{...address,country:"Nigeria",delivery_method:delivery,payment_method:"paystack",payment_reference:initialized.reference}})});if(response.ok){window.clearInterval(poll);const result=await response.json();const itemLines=rows.map(row=>`• ${row.products?.name||"Product"}${row.selected_variant?.label?` (${row.selected_variant.label})`:""} × ${row.quantity??1}`).join("\n");const message=["Hello Taiga, I have completed this order.","",`Order: ${result.order.order_number}`,itemLines,`Total: ${money(total)}`,`Customer: ${address.first_name} ${address.last_name}`,`Phone: ${address.phone}`,`Delivery address: ${address.line1}, ${address.city}, ${address.state}`,"","Please confirm that you received it."].filter(Boolean).join("\n");setWhatsappOrder(`https://wa.me/${whatsappNumber(supportPhone)}?text=${encodeURIComponent(message)}`);setDone(result.order.order_number);setCheckout(false);await load();onChanged()}},2500);
       window.setTimeout(()=>window.clearInterval(poll),10*60*1000);
     }catch(loadError:any){
       setBusy(false);
@@ -145,10 +148,10 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   }
 
   const subtotal=rows.reduce((sum,row)=>sum+Number(row.selected_variant?.price??(Array.isArray(row.products?.variants)?row.products.variants.find((variant:any)=>variant.id===row.variant_key)?.price:null)??row.products?.price??0)*(row.quantity??1),0),
-        shipping=delivery?(delivery==="pickup"?Number(deliverySettings.pickup_shipping_fee):Number(deliverySettings.standard_shipping_fee)):null,
+        shipping=delivery?Math.max(2500,Number(deliverySettings.standard_shipping_fee)):null,
         total=subtotal+(shipping??0);
 
-  return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:kind==="account"?<UserRound/>:kind==="inbox"?<Mail/>:<Package/>}<h2>{kind==="cart"?`Your Cart (${rows.length})`:kind==="wishlist"?"Saved items":kind==="account"?"My account":kind==="inbox"?"Inbox":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
+  return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:kind==="account"?<UserRound/>:kind==="inbox"?<Mail/>:<Package/>}<h2>{kind==="cart"?`Your Cart${cartItemCount>0?` (${cartItemCount})`:""}`:kind==="wishlist"?"Saved items":kind==="account"?"My account":kind==="inbox"?"Inbox":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
   {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:kind==="account"?<div className="account-panel-content"><div className="account-avatar">{String(rows[0]?.full_name||rows[0]?.email||"T").charAt(0).toUpperCase()}</div><span>Taiga customer</span><h3>{rows[0]?.full_name}</h3><p>{rows[0]?.email}</p><dl><div><dt>Account status</dt><dd>Active</dd></div><div><dt>Member since</dt><dd>{rows[0]?.created_at?new Date(rows[0].created_at).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}):"Recently joined"}</dd></div></dl><p>Your profile is connected to your secure Taiga sign-in.</p></div>:kind==="inbox"?<div className="inbox-list">{rows.length?rows.map(row=><article key={row.id}><span><PackageCheck/></span><div><strong>Order {row.order_number} is {String(row.status).replaceAll("_"," ")}</strong><p>Your order total is {money(Number(row.total))}. Open Orders for full tracking details.</p><small>{new Date(row.created_at).toLocaleString()}</small></div></article>):<div className="panel-empty"><Mail/><h3>Your inbox is clear</h3><p>Updates about your orders will appear here automatically.</p></div>}</div>:done?<div className="success-state"><div className="success-icon"><CheckCircle2/></div><span>Order confirmed</span><h3>Thank you for your order</h3><p>Your payment was confirmed and your order is being prepared.</p><div className="success-reference"><small>Order reference</small><strong>{done}</strong></div><button onClick={onClose}>Continue shopping</button></div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
     
     {kind==="orders" ? rows.map(row=>{
@@ -260,11 +263,12 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     <h4>Order summary</h4>
     <div><span>Subtotal</span><strong>{money(subtotal)}</strong></div>
     <div><span>Delivery</span><strong>{shipping===null?"Calculated at checkout":shipping===0?"FREE":money(shipping)}</strong></div>
-    <button onClick={()=>{setCheckout(true);setStep(1);setDelivery("");setError("")}}>Go to checkout</button>
+    <button onClick={()=>{setCheckout(true);setStep(1);setDelivery("standard");setError("")}}>Go to checkout</button>
   </footer>}
   {checkout&&<div className="checkout-screen"><div className="checkout-main"><button className="back-checkout" onClick={()=>setCheckout(false)}>← Back to cart</button><div className="checkout-steps">{["Customer address","Delivery details","Payment method"].map((label,index)=><button className={step===index+1?"active":step>index+1?"complete":""} onClick={()=>step>index+1&&setStep(index+1)} key={label}><span>{step>index+1?<Check/>:index+1}</span>{label}</button>)}</div>
   {step===1&&<form className="address-form validated-form" noValidate onSubmit={event=>{event.preventDefault();if(!validateAddress())return;setAddress(current=>Object.fromEntries(Object.entries(current).map(([key,value])=>[key,value.trim()])) as typeof current);setStep(2)}}><div className="checkout-title"><span>Step 1 of 3</span><h3>Where should we deliver?</h3><p>Enter the recipient’s Nigerian delivery address.</p></div><div className="form-grid">{Object.entries(address).map(([key,value])=>key==="state"?<label key={key}>State<select value={value} onChange={event=>{setAddressError("");setAddress({...address,state:event.target.value,city:""})}} required><option value="">Select a state</option>{nigeriaStates.map(state=><option key={state} value={state}>{state}</option>)}</select></label>:key==="city"?<label key={key}>City<select value={value} onChange={event=>{setAddressError("");setAddress({...address,city:event.target.value})}} disabled={!address.state} required><option value="">{address.state?"Select a city":"Select a state first"}</option>{(nigeriaCities[address.state]??[]).map(city=><option key={city} value={city}>{city}</option>)}</select></label>:<label key={key}>{key==="line1"?"Street address":key.replaceAll("_"," ")}<input {...addressInputRules(key)} value={value} onChange={event=>{setAddressError("");setAddress({...address,[key]:event.target.value})}} required={!['additional_phone','additional_info'].includes(key)} placeholder={key==="phone"?"e.g. 08030000000":""}/></label>)}</div>{addressError&&<div className="form-error" role="alert"><AlertCircle/>{addressError}</div>}<div className="step-actions"><button type="button" onClick={()=>setCheckout(false)}>Cancel</button><button>Save & continue</button></div></form>}
-  {step===2&&<div className="choice-step delivery-choice"><div className="checkout-title"><span>Step 2 of 3</span><h3>How would you like to receive your order?</h3><p>Choose one option. Delivery charges are only applied after your selection.</p></div><label className={delivery==="standard"?"selected":""}><input type="radio" name="delivery" checked={delivery==="standard"} onChange={()=>setDelivery("standard")}/><span className="delivery-radio" aria-hidden="true"/><div><strong>Standard delivery</strong><span>Doorstep delivery in 2–5 business days</span><small>Tracked nationwide delivery to your saved address</small></div><b>{money(Number(deliverySettings.standard_shipping_fee))}</b></label><label className={delivery==="pickup"?"selected":""}><input type="radio" name="delivery" checked={delivery==="pickup"} onChange={()=>setDelivery("pickup")}/><span className="delivery-radio" aria-hidden="true"/><div><strong>Pick-up station</strong><span>Collect from a Taiga collection point</span><small>We will notify you when your order is ready</small></div><b>{money(Number(deliverySettings.pickup_shipping_fee))}</b></label>{!delivery&&<p className="delivery-hint">Select an option to see your final order total.</p>}<div className="step-actions"><button onClick={()=>setStep(1)}>Back</button><button onClick={()=>setStep(3)} disabled={!delivery}>Continue</button></div></div>}
+  {step===2&&<div className="choice-step delivery-choice"><div className="checkout-title"><span>Step 2 of 3</span><h3>Delivery details</h3><p>Taiga currently provides doorstep delivery only.</p></div><div className="selected delivery-only-card"><Truck/><div><strong>Standard delivery</strong><span>Doorstep delivery in 2–5 business days</span><small>Nationwide delivery to your saved address. Fee starts from ₦2,500.</small></div><b>{money(Math.max(2500,Number(deliverySettings.standard_shipping_fee)))}</b></div><div className="step-actions"><button onClick={()=>setStep(1)}>Back</button><button onClick={()=>{setDelivery("standard");setStep(3)}}>Continue</button></div></div>}
   {step===3&&<div className="choice-step"><div className="checkout-title"><span>Step 3 of 3</span><h3>Pay securely with Paystack</h3><p>Choose card, bank transfer, bank account or USSD in the secure Paystack window.</p></div><div className="paystack-option selected"><span className="paystack-mark">paystack</span><div><strong>Paystack secure checkout</strong><small>Your payment information is processed securely by Paystack.</small></div><CreditCard/></div><div className="secure-note"><ShieldCheck/> Your order is created only after Paystack confirms the payment.</div>{error&&<div className="checkout-error">{error}</div>}<div className="step-actions"><button onClick={()=>setStep(2)}>Back</button><button onClick={payWithPaystack} disabled={busy}>{busy?"Connecting to Paystack…":`Pay ${money(total)}`}</button></div></div>}</div><aside className="checkout-summary"><h3>Order summary</h3><div><span>Items total ({rows.reduce((sum,row)=>sum+(row.quantity??1),0)})</span><b>{money(subtotal)}</b></div><div><span>Delivery</span><b>{shipping===null?"Select a method":shipping===0?"FREE":money(shipping)}</b></div><div className="summary-total"><span>Total</span><strong>{money(total)}</strong></div><p>All prices and payments are in Nigerian naira.</p></aside></div>}
+  {done&&whatsappOrder&&<div className="post-order-whatsapp"><a className="send-order-whatsapp" href={whatsappOrder} target="_blank" rel="noreferrer"><MessageCircle/> Send order on WhatsApp</a><small>WhatsApp will open with your order details. Review them, then press Send.</small></div>}
   </aside></div>
 }
