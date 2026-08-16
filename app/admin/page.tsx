@@ -6,7 +6,7 @@ import {
   LayoutDashboard, LogOut, Package, Plus, Search, Settings, 
   ShoppingCart, Store, Tags, Trash2, Truck, Users, Wallet, X, PackageCheck,
   TrendingUp, ArrowUpRight, ArrowDownRight, Edit3, ClipboardCheck,
-  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck, RotateCcw
+  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck, RotateCcw, Download
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useSessionTimeout } from "../../lib/use-session-timeout";
@@ -51,7 +51,10 @@ export default function Admin(){
         [notice,setNotice]=useState(""),
         [commerceTablesReady,setCommerceTablesReady]=useState(true),
         [showRevenueReset,setShowRevenueReset]=useState(false),
-        [resettingRevenue,setResettingRevenue]=useState(false);
+        [resettingRevenue,setResettingRevenue]=useState(false),
+        [exportScope,setExportScope]=useState<"current"|"previous"|"all"|"custom">("current"),
+        [exportStart,setExportStart]=useState(""),
+        [exportEnd,setExportEnd]=useState("");
 
   const [storeSettings,setStoreSettings]=useState<any>({
     store_name:"Taiga Online Shopping Limited",
@@ -271,6 +274,54 @@ export default function Admin(){
     setStoreSettings((current:any)=>({...current,revenue_reporting_started_at:data}));
     await load();
     flash("A new revenue reporting period has started");
+  }
+
+  function downloadRevenueReport(){
+    const latestReset=auditLogs.find(log=>log.action==="revenue.reporting_period_started");
+    let periodStart:Date|null=null,periodEnd:Date|null=null,periodName="All time";
+    if(exportScope==="current"){
+      periodStart=storeSettings.revenue_reporting_started_at?new Date(storeSettings.revenue_reporting_started_at):null;
+      periodName=periodStart?"Current reporting period":"All time (no reporting reset yet)";
+    }else if(exportScope==="previous"){
+      if(!latestReset?.details?.started_at)return flash("No previous reporting period is available yet.");
+      periodStart=latestReset.details.previous_started_at?new Date(latestReset.details.previous_started_at):null;
+      periodEnd=new Date(latestReset.details.started_at);
+      periodName="Previous reporting period";
+    }else if(exportScope==="custom"){
+      if(!exportStart||!exportEnd)return flash("Choose both a start date and an end date.");
+      periodStart=new Date(`${exportStart}T00:00:00`);
+      periodEnd=new Date(`${exportEnd}T23:59:59.999`);
+      if(periodStart>periodEnd)return flash("The start date must be before the end date.");
+      periodName="Custom date range";
+    }
+    const exportOrders=orders.filter(order=>{
+      const created=new Date(order.created_at);
+      return (!periodStart||created>=periodStart)&&(!periodEnd||created<periodEnd||(exportScope==="custom"&&created<=periodEnd));
+    });
+    const countedRevenue=exportOrders.filter(order=>order.status!=="cancelled").reduce((sum,order)=>sum+Number(order.total),0);
+    const safeCell=(value:unknown)=>{
+      let text=String(value??"");
+      if(/^[=+\-@]/.test(text))text=`'${text}`;
+      return `"${text.replaceAll('"','""')}"`;
+    };
+    const metadata=[
+      ["Taiga revenue report",periodName],
+      ["Generated",new Date().toLocaleString("en-NG")],
+      ["Period start",periodStart?periodStart.toLocaleString("en-NG"):"Beginning of records"],
+      ["Period end",periodEnd?periodEnd.toLocaleString("en-NG"):"Present"],
+      ["Orders",exportOrders.length],
+      ["Counted revenue (NGN)",countedRevenue]
+    ];
+    const columns=["Order reference","Order date","Status","Products","Units","Subtotal (NGN)","Delivery fee (NGN)","Order total (NGN)","Counts toward revenue","Counted revenue (NGN)"];
+    const rows=exportOrders.map(order=>{
+      const items=order.order_items??[];
+      return [order.order_number,new Date(order.created_at).toLocaleString("en-NG"),String(order.status).replaceAll("_"," "),items.map((item:any)=>`${item.product_name} x${item.quantity}`).join("; "),items.reduce((sum:number,item:any)=>sum+Number(item.quantity||0),0),Number(order.subtotal),Number(order.shipping),Number(order.total),order.status==="cancelled"?"No":"Yes",order.status==="cancelled"?0:Number(order.total)];
+    });
+    const csv=`\uFEFF${metadata.map(row=>row.map(safeCell).join(",")).join("\r\n")}\r\n\r\n${columns.map(safeCell).join(",")}\r\n${rows.map(row=>row.map(safeCell).join(",")).join("\r\n")}`;
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");
+    link.href=url;link.download=`taiga-revenue-${exportScope}-${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+    supabase.rpc("write_admin_log",{log_action:"revenue.report_exported",log_entity_type:"orders",log_entity_id:null,log_details:{scope:exportScope,period_start:periodStart?.toISOString()??null,period_end:periodEnd?.toISOString()??null,order_count:exportOrders.length,counted_revenue:countedRevenue}}).then(()=>{});
+    flash(`${periodName} report downloaded`);
   }
 
   async function saveBanner(e:React.FormEvent<HTMLFormElement>){
@@ -666,6 +717,10 @@ export default function Admin(){
 
           {tab==="Analytics" && (
             <>
+              <section className="revenue-export-panel" aria-labelledby="revenue-export-title">
+                <div><span className="admin-eyebrow">Revenue archive</span><h2 id="revenue-export-title">Download revenue report</h2><p>Export current, previous or all-time order revenue for Excel and Google Sheets.</p></div>
+                <div className="revenue-export-controls"><label>Report period<select value={exportScope} onChange={event=>setExportScope(event.target.value as typeof exportScope)}><option value="current">Current period</option><option value="previous" disabled={!auditLogs.some(log=>log.action==="revenue.reporting_period_started")}>Previous period</option><option value="all">All time</option><option value="custom">Custom dates</option></select></label>{exportScope==="custom"&&<><label>Start date<input type="date" value={exportStart} onChange={event=>setExportStart(event.target.value)}/></label><label>End date<input type="date" value={exportEnd} onChange={event=>setExportEnd(event.target.value)}/></label></>}<button onClick={downloadRevenueReport}><Download size={16}/> Download CSV</button></div>
+              </section>
               <section className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", margin: "24px 0" }}>
                 <Stat icon={CircleDollarSign} label="Total Volume" value={`₦${revenue.toLocaleString()}`} trend={reportingPeriodLabel} trendUp={true} />
                 <Stat icon={ShoppingCart} label="Basket Average" value={`₦${avg.toLocaleString()}`} trend={reportingPeriodLabel} trendUp={true} />

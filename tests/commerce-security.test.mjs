@@ -11,6 +11,7 @@ const deliveryOnlyMigration=await readFile(new URL("../supabase/migrations/20260
 const revenueReportingMigration=await readFile(new URL("../supabase/migrations/202608160001_revenue_reporting_period.sql",import.meta.url),"utf8");
 const initializeRoute=await readFile(new URL("../app/api/paystack/initialize/route.ts",import.meta.url),"utf8");
 const verifyRoute=await readFile(new URL("../app/api/paystack/verify/route.ts",import.meta.url),"utf8");
+const adminPage=await readFile(new URL("../app/admin/page.tsx",import.meta.url),"utf8");
 
 test("payment endpoints require an authenticated Supabase user",()=>{
   assert.match(initializeRoute,/authenticatedUser\(request\)/);
@@ -80,4 +81,14 @@ test("revenue reporting can restart without deleting financial records",()=>{
   assert.match(revenueReportingMigration,/orders_preserved',true/i);
   assert.doesNotMatch(revenueReportingMigration,/delete\s+from\s+public\.orders/i);
   assert.match(revenueReportingMigration,/revoke all on function public\.start_new_revenue_reporting_period\(\) from public,anon/i);
+});
+
+test("admins can export preserved revenue periods safely",()=>{
+  assert.match(adminPage,/Current period/);
+  assert.match(adminPage,/Previous period/);
+  assert.match(adminPage,/All time/);
+  assert.match(adminPage,/Custom dates/);
+  assert.match(adminPage,/text\/csv;charset=utf-8/);
+  assert.match(adminPage,/revenue\.report_exported/);
+  assert.match(adminPage,/if\(\/\^\[=\+\\-@\]\//);
 });
