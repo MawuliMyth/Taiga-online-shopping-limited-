@@ -67,6 +67,7 @@ alter table public.store_settings add column if not exists announcement_center t
 alter table public.store_settings add column if not exists announcement_right text not null default 'Call / WhatsApp: 0800 466 3639';
 alter table public.store_settings add column if not exists flash_sale_title text not null default 'Flash Sales';
 alter table public.store_settings add column if not exists flash_sale_ends_at timestamptz default (now() + interval '1 day');
+alter table public.store_settings add column if not exists revenue_reporting_started_at timestamptz;
 
 create table if not exists public.banners (
   id uuid primary key default gen_random_uuid(),

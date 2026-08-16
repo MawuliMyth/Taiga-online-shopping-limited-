@@ -6,7 +6,7 @@ import {
   LayoutDashboard, LogOut, Package, Plus, Search, Settings, 
   ShoppingCart, Store, Tags, Trash2, Truck, Users, Wallet, X, PackageCheck,
   TrendingUp, ArrowUpRight, ArrowDownRight, Edit3, ClipboardCheck,
-  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck
+  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck, RotateCcw
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useSessionTimeout } from "../../lib/use-session-timeout";
@@ -49,7 +49,9 @@ export default function Admin(){
         [categoryName,setCategoryName]=useState(""),
         [productView,setProductView]=useState<"all"|"active"|"draft"|"low">("all"),
         [notice,setNotice]=useState(""),
-        [commerceTablesReady,setCommerceTablesReady]=useState(true);
+        [commerceTablesReady,setCommerceTablesReady]=useState(true),
+        [showRevenueReset,setShowRevenueReset]=useState(false),
+        [resettingRevenue,setResettingRevenue]=useState(false);
 
   const [storeSettings,setStoreSettings]=useState<any>({
     store_name:"Taiga Online Shopping Limited",
@@ -257,6 +259,20 @@ export default function Admin(){
     flash(error?error.message:"Store settings saved");
   }
 
+  async function startNewReportingPeriod(){
+    setResettingRevenue(true);
+    const {data,error}=await supabase.rpc("start_new_revenue_reporting_period");
+    setResettingRevenue(false);
+    if(error){
+      const missing=error.code==="PGRST202"||error.message.toLowerCase().includes("schema cache")||error.message.toLowerCase().includes("function");
+      return flash(missing?"Revenue reset is not installed in the database yet. Run the latest Supabase migration, then try again.":error.message);
+    }
+    setShowRevenueReset(false);
+    setStoreSettings((current:any)=>({...current,revenue_reporting_started_at:data}));
+    await load();
+    flash("A new revenue reporting period has started");
+  }
+
   async function saveBanner(e:React.FormEvent<HTMLFormElement>){
     e.preventDefault();
     const f=new FormData(e.currentTarget);
@@ -302,9 +318,13 @@ export default function Admin(){
     load();
   }
 
-  const revenue=orders.filter(o=>o.status!=="cancelled").reduce((s,o)=>s+Number(o.total),0),
-        avg=orders.length?revenue/orders.length:0,
+  const reportingStartedAt=storeSettings.revenue_reporting_started_at?new Date(storeSettings.revenue_reporting_started_at):null,
+        reportingOrders=orders.filter(order=>!reportingStartedAt||new Date(order.created_at)>=reportingStartedAt),
+        revenueOrders=reportingOrders.filter(order=>order.status!=="cancelled"),
+        revenue=revenueOrders.reduce((sum,order)=>sum+Number(order.total),0),
+        avg=revenueOrders.length?revenue/revenueOrders.length:0,
         low=products.filter(p=>p.inventory<10).length;
+  const reportingPeriodLabel=reportingStartedAt?`Since ${reportingStartedAt.toLocaleDateString("en-NG",{day:"numeric",month:"short",year:"numeric"})}`:"All-time reporting";
         
   const filteredProducts=products.filter(p=>{
     const matchesSearch=p.name.toLowerCase().includes(search.toLowerCase())||String(p.sku??"").toLowerCase().includes(search.toLowerCase());
@@ -347,6 +367,7 @@ export default function Admin(){
   </main>;
   
   return <div className="dashboard-shell" style={{ display: "grid", gridTemplateColumns: "278px 1fr" }}>{notice&&<div className="toast">{notice}</div>}
+    {showRevenueReset&&<div className="info-modal-overlay" role="presentation" onMouseDown={event=>event.target===event.currentTarget&&!resettingRevenue&&setShowRevenueReset(false)}><section className="info-modal revenue-reset-modal" role="dialog" aria-modal="true" aria-labelledby="revenue-reset-title"><button className="info-close" onClick={()=>setShowRevenueReset(false)} disabled={resettingRevenue} aria-label="Close"><X/></button><span className="kicker">Financial reporting</span><h2 id="revenue-reset-title">Start a new reporting period?</h2><p>The dashboard revenue, order count, basket average, units and revenue charts will restart from zero. Existing orders, receipts and customer history will remain available.</p><div className="revenue-reset-summary"><ShieldCheck/><span><strong>No financial records will be deleted</strong><small>The reset time and administrator will be recorded in Audit Logs.</small></span></div><div className="info-actions"><button onClick={()=>setShowRevenueReset(false)} disabled={resettingRevenue}>Cancel</button><button className="danger-confirm" onClick={startNewReportingPeriod} disabled={resettingRevenue}>{resettingRevenue?"Starting…":"Start new period"}</button></div></section></div>}
     <aside className="sidebar" style={{ width: "100%", height: "100vh", position: "sticky", top: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", padding: "16px 20px" }}>
         <Link href="/" className="logo"><span>T</span>Taiga<small>ADMIN</small></Link>
@@ -391,7 +412,7 @@ export default function Admin(){
             <h1 style={{ fontSize: "28px", fontWeight: 900, marginTop: "4px" }}>{tab}</h1>
             <p style={{ fontSize: "13px", color: "var(--muted)" }}>Manage and monitor Taiga Online Shopping Limited in real time.</p>
           </div>
-          <div className="heading-actions"><div className="admin-date"><Clock size={16}/>{new Intl.DateTimeFormat("en-NG",{day:"2-digit",month:"short",year:"numeric"}).format(new Date())}</div>{tab==="Products"&&<button className="primary-action" onClick={()=>setEditing({...emptyProduct})} style={{ padding: "10px 20px", display: "flex", gap: "8px", alignItems: "center" }}><Plus/> Add product</button>}</div>
+          <div className="heading-actions"><div className="admin-date"><Clock size={16}/>{new Intl.DateTimeFormat("en-NG",{day:"2-digit",month:"short",year:"numeric"}).format(new Date())}</div>{(tab==="Dashboard"||tab==="Analytics")&&<button className="reporting-reset-action" onClick={()=>setShowRevenueReset(true)}><RotateCcw size={15}/> Start new reporting period</button>}{tab==="Products"&&<button className="primary-action" onClick={()=>setEditing({...emptyProduct})} style={{ padding: "10px 20px", display: "flex", gap: "8px", alignItems: "center" }}><Plus/> Add product</button>}</div>
         </div>
 
         {loading ? <div className="admin-loading">Loading live store data…</div> : <>
@@ -399,8 +420,8 @@ export default function Admin(){
             <>
               {/* Stripe-like Analytics Cards */}
               <section className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", margin: "24px 0" }}>
-                <Stat icon={CircleDollarSign} label="Gross Revenue" value={`₦${revenue.toLocaleString()}`} trend="+14.2%" trendUp={true} />
-                <Stat icon={ShoppingCart} label="Order Count" value={orders.length} trend="+8.5%" trendUp={true} />
+                <Stat icon={CircleDollarSign} label="Gross Revenue" value={`₦${revenue.toLocaleString()}`} trend={reportingPeriodLabel} trendUp={true} />
+                <Stat icon={ShoppingCart} label="Order Count" value={reportingOrders.length} trend={reportingPeriodLabel} trendUp={true} />
                 <Stat icon={Users} label="Total Customers" value={customers.length} trend="+18.1%" trendUp={true} />
                 <Stat icon={Boxes} label="Low Stock Items" value={low} trend={low > 0 ? "Needs restock" : "All clear"} trendUp={low === 0} />
               </section>
@@ -408,15 +429,16 @@ export default function Admin(){
               {/* Core visual grid */}
               <section className="dash-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", margin: "24px 0" }}>
                 <div className="panel" style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "24px" }}>
-                  <PanelTitle title="Revenue chart" sub="Visual display of order sizes in recent history" />
+                  <PanelTitle title="Revenue chart" sub={reportingPeriodLabel} />
                   <div className="chart" style={{ display: "flex", alignItems: "flex-end", height: "180px", gap: "6px", marginTop: "24px", paddingBottom: "10px", borderBottom: "1px solid var(--border)" }}>
-                    {orders.slice(0, 24).reverse().map((o, i) => (
+                    {reportingOrders.length===0&&<div className="reporting-empty"><BarChart3/><strong>No revenue in this period yet</strong><span>New orders will appear here automatically.</span></div>}
+                    {reportingOrders.slice(0, 24).reverse().map(o => (
                       <div className="bar-wrap" key={o.id} style={{ flex: 1, height: "100%", display: "flex", alignItems: "flex-end" }} title={`${o.order_number}: ₦${o.total.toLocaleString()}`}>
                         <div 
                           className="bar" 
                           style={{ 
                             width: "100%",
-                            height: `${Math.max(8, Math.min(100, Number(o.total) / (Math.max(...orders.map(x => Number(x.total)), 1)) * 100))}%`, 
+                            height: `${Math.max(8, Math.min(100, Number(o.total) / (Math.max(...reportingOrders.map(x => Number(x.total)), 1)) * 100))}%`,
                             background: "var(--primary)",
                             borderRadius: "2px 2px 0 0",
                             transition: "height 0.3s ease"
@@ -645,22 +667,23 @@ export default function Admin(){
           {tab==="Analytics" && (
             <>
               <section className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", margin: "24px 0" }}>
-                <Stat icon={CircleDollarSign} label="Total Volume" value={`₦${revenue.toLocaleString()}`} trend="Live sales volume" trendUp={true} />
-                <Stat icon={ShoppingCart} label="Basket Average" value={`₦${avg.toLocaleString()}`} trend="Averaged over all orders" trendUp={true} />
-                <Stat icon={Package} label="Units Dispatched" value={orders.reduce((s,o)=>s+(o.order_items?.reduce((n:number,i:any)=>n+i.quantity,0)??0),0)} trend="Gross units purchased" trendUp={true} />
+                <Stat icon={CircleDollarSign} label="Total Volume" value={`₦${revenue.toLocaleString()}`} trend={reportingPeriodLabel} trendUp={true} />
+                <Stat icon={ShoppingCart} label="Basket Average" value={`₦${avg.toLocaleString()}`} trend={reportingPeriodLabel} trendUp={true} />
+                <Stat icon={Package} label="Units Dispatched" value={reportingOrders.reduce((s,o)=>s+(o.order_items?.reduce((n:number,i:any)=>n+i.quantity,0)??0),0)} trend={reportingPeriodLabel} trendUp={true} />
                 <Stat icon={Users} label="Newsletter Reach" value={subscribers.length} trend="Total subscribers" trendUp={true} />
               </section>
 
               <div className="panel analytics-panel" style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "24px" }}>
-                <PanelTitle title="Sales activity history" sub="Completed and active checkout values in the database" />
+                <PanelTitle title="Sales activity history" sub={reportingPeriodLabel} />
                 <div className="chart large" style={{ display: "flex", alignItems: "flex-end", height: "240px", gap: "4px", marginTop: "24px", paddingBottom: "10px", borderBottom: "1px solid var(--border)" }}>
-                  {orders.map(o=>(
+                  {reportingOrders.length===0&&<div className="reporting-empty"><BarChart3/><strong>No sales in this period yet</strong><span>New order activity will appear here automatically.</span></div>}
+                  {reportingOrders.map(o=>(
                     <div className="bar-wrap" key={o.id} style={{ flex: 1, height: "100%", display: "flex", alignItems: "flex-end" }} title={`${o.order_number}: ₦${o.total.toLocaleString()}`}>
                       <div 
                         className="bar" 
                         style={{ 
                           width: "100%",
-                          height: `${Math.max(5, Number(o.total)/(Math.max(...orders.map(x=>Number(x.total)),1))*100)}%`,
+                          height: `${Math.max(5, Number(o.total)/(Math.max(...reportingOrders.map(x=>Number(x.total)),1))*100)}%`,
                           background: "var(--primary)",
                           borderRadius: "1px 1px 0 0"
                         }}

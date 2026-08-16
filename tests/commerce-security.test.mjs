@@ -8,6 +8,7 @@ const reviewMigration=await readFile(new URL("../supabase/migrations/20260720000
 const merchandisingMigration=await readFile(new URL("../supabase/migrations/202607220001_product_merchandising.sql",import.meta.url),"utf8");
 const paidDeliveryMigration=await readFile(new URL("../supabase/migrations/202607280001_remove_free_delivery.sql",import.meta.url),"utf8");
 const deliveryOnlyMigration=await readFile(new URL("../supabase/migrations/202608130001_delivery_only.sql",import.meta.url),"utf8");
+const revenueReportingMigration=await readFile(new URL("../supabase/migrations/202608160001_revenue_reporting_period.sql",import.meta.url),"utf8");
 const initializeRoute=await readFile(new URL("../app/api/paystack/initialize/route.ts",import.meta.url),"utf8");
 const verifyRoute=await readFile(new URL("../app/api/paystack/verify/route.ts",import.meta.url),"utf8");
 
@@ -70,4 +71,13 @@ test("product policies and merchandising are admin managed",()=>{
   assert.match(merchandisingMigration,/returnable boolean/i);
   assert.match(merchandisingMigration,/sales_count integer/i);
   assert.match(merchandisingMigration,/increment_product_sales_after_order/i);
+});
+
+test("revenue reporting can restart without deleting financial records",()=>{
+  assert.match(revenueReportingMigration,/revenue_reporting_started_at timestamptz/i);
+  assert.match(revenueReportingMigration,/if not public\.is_admin\(\)/i);
+  assert.match(revenueReportingMigration,/revenue\.reporting_period_started/i);
+  assert.match(revenueReportingMigration,/orders_preserved',true/i);
+  assert.doesNotMatch(revenueReportingMigration,/delete\s+from\s+public\.orders/i);
+  assert.match(revenueReportingMigration,/revoke all on function public\.start_new_revenue_reporting_period\(\) from public,anon/i);
 });
