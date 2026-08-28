@@ -2190,6 +2190,17 @@ footer {
   color: var(--muted);
 }
 
+.bank-transfer-step{display:flex;flex-direction:column;min-height:0}.bank-transfer-step .checkout-title strong{color:var(--foreground);white-space:nowrap}
+.bank-account-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bank-account-card{min-width:0;overflow:hidden;border:1px solid var(--border);border-radius:14px;background:var(--card-bg);transition:border-color var(--transition-fast),box-shadow var(--transition-fast),transform var(--transition-fast)}
+.bank-account-card.selected{border-color:var(--primary);box-shadow:0 0 0 3px rgba(13,122,95,.09);transform:translateY(-1px)}
+.bank-account-select{width:100%;min-height:156px;display:grid;grid-template-rows:48px 1fr;align-content:start;gap:10px;position:relative;padding:14px;text-align:left}
+.bank-logo{height:48px;display:flex;align-items:center;justify-content:flex-start;overflow:hidden;border-radius:8px;background:#fff}.bank-logo img{width:100%;height:100%;object-fit:contain;object-position:left center}
+.bank-account-copy{min-width:0;display:grid;gap:4px}.bank-account-copy small{color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.bank-account-copy strong{color:var(--foreground);font-size:18px;letter-spacing:.04em}.bank-account-copy>span{color:var(--muted);font-size:10px;line-height:1.4}
+.bank-selected-mark{position:absolute;top:10px;right:10px;width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:var(--primary);color:#fff}.bank-selected-mark:empty{background:var(--secondary);border:1px solid var(--border)}.bank-selected-mark svg{width:13px;height:13px;stroke-width:3}
+.copy-account{width:100%;min-height:36px;display:flex;align-items:center;justify-content:center;gap:6px;border-top:1px solid var(--border);background:var(--secondary);color:var(--primary);font-size:10px;font-weight:850}.copy-account svg{width:13px;height:13px}
+.bank-transfer-note{align-items:flex-start;padding:12px 14px;border:1px solid #b8ddd2;border-radius:10px;background:var(--primary-light);color:var(--foreground);line-height:1.5}.bank-transfer-note svg{flex:0 0 auto;color:var(--primary)}
+
 .secure-note {
   display: flex;
   align-items: center;
@@ -2237,6 +2248,8 @@ footer {
 .step-actions button:last-child:hover {
   background: var(--primary-hover);
 }
+
+.step-actions .bank-proof-action{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:var(--radius-md);background:#25d366;color:#fff;font-size:12px;font-weight:850;text-align:center}.step-actions .bank-proof-action:hover{background:#20bd5a}.step-actions .bank-proof-action svg{width:17px;height:17px}
 
 .checkout-summary {
   background: var(--card-bg);
@@ -4691,6 +4704,8 @@ img,video,canvas{max-width:100%}button,input,select,textarea{max-width:100%}.sto
 .whatsapp-support{position:fixed;right:22px;bottom:22px;z-index:90;display:flex;align-items:center;gap:9px;padding:8px 8px 8px 14px;border-radius:999px;background:#25d366;color:#fff!important;box-shadow:0 12px 30px rgba(9,94,45,.28);font-size:11px;font-weight:850;transition:.18s ease}.whatsapp-support:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(9,94,45,.34)}.whatsapp-support b{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#fff;color:#128c4a}.whatsapp-support b svg{width:25px;height:25px;fill:#25d366}.whatsapp-support b svg path:nth-child(2){fill:#fff}.whatsapp-support:focus-visible{outline:3px solid rgba(37,211,102,.3);outline-offset:3px}
 .post-order-whatsapp{display:grid;gap:7px;padding:0 24px 24px;text-align:center}.send-order-whatsapp{min-height:46px;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 16px;border-radius:9px;background:#25d366;color:#fff!important;font-size:12px;font-weight:850;box-shadow:0 8px 20px rgba(18,140,74,.2)}.send-order-whatsapp:hover{background:#20bd5a}.send-order-whatsapp svg{width:18px;height:18px}.post-order-whatsapp small{color:var(--muted);font-size:10px;line-height:1.5}
 @media(max-width:600px){.delivery-only-card{grid-template-columns:auto minmax(0,1fr)}.delivery-only-card>b{grid-column:2}.whatsapp-support{right:14px;bottom:14px;padding-left:10px}.whatsapp-support span{display:none}.post-order-whatsapp{padding:0 14px 18px}}
+@media(max-width:760px){.bank-account-grid{grid-template-columns:1fr}.bank-account-select{min-height:116px;grid-template-columns:110px minmax(0,1fr);grid-template-rows:1fr;align-items:center}.bank-logo{width:110px}.bank-account-copy strong{font-size:17px}}
+@media(max-width:600px){.bank-account-select{grid-template-columns:82px minmax(0,1fr);padding:12px}.bank-logo{width:82px;height:42px}.bank-account-copy strong{font-size:15px}.step-actions{align-items:stretch;flex-direction:column-reverse}.step-actions button,.step-actions .bank-proof-action{width:100%}}
 .product-image-uploader{padding:18px;border:1px solid var(--border);border-radius:var(--radius-lg);background:#f8faf9}.image-uploader-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.image-uploader-heading>div{display:grid;gap:3px}.image-uploader-heading strong{font-size:13px}.image-uploader-heading small{font-size:10px;color:var(--muted)}.image-uploader-heading>span{padding:5px 8px;border-radius:999px;background:var(--primary-light);color:var(--primary);font-size:9px;font-weight:850}.device-upload-zone{position:relative;min-height:118px;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center;gap:5px!important;border:1.5px dashed var(--primary)!important;border-radius:12px;background:var(--card-bg);color:var(--primary)!important;cursor:pointer;transition:.18s ease}.device-upload-zone:hover{background:var(--primary-light);box-shadow:0 0 0 3px rgba(13,122,95,.08)}.device-upload-zone>svg{width:26px;height:26px}.device-upload-zone>b{font-size:11px}.device-upload-zone>small{font-size:9px;color:var(--muted);font-weight:500}.device-upload-zone input{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;opacity:0;cursor:pointer}.product-image-uploader .gallery-admin-preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px}.product-image-uploader .gallery-admin-preview figure{width:100%;height:130px;background:#fff}.product-image-uploader .gallery-admin-preview figure>button:not(.make-primary){z-index:2}.product-image-uploader .gallery-admin-preview figure .make-primary{position:absolute;left:6px;right:6px;bottom:24px;top:auto;width:auto;height:24px;border-radius:6px;background:rgba(13,122,95,.92);font-size:8px;font-weight:800;opacity:0;transition:.15s}.product-image-uploader .gallery-admin-preview figure:hover .make-primary{opacity:1}
 /* Dedicated catalogue, search, account and customer-care routes */
 .catalogue-page,.help-page,.account-route{min-height:100vh;background:var(--secondary);color:var(--foreground)}

@@ -3,6 +3,7 @@ import { apiError, authenticatedUser, serverClients } from "../../../../lib/serv
 export async function POST(request:Request){
   try{
     const user=await authenticatedUser(request);
+    if(process.env.PAYSTACK_CHECKOUT_ENABLED!=="true") throw new Error("Paystack checkout is temporarily disabled.");
     const {reference,address}=await request.json() as {reference?:string;address?:Record<string,string>};
     if(!reference||!address) throw new Error("Payment reference and delivery address are required.");
     const secret=process.env.PAYSTACK_SECRET_KEY;

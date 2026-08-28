@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { 
-  Check, CheckCircle2, CreditCard, Heart, Minus, Package, Plus, 
+  Check, CreditCard, Heart, Minus, Package, Plus, 
   ShieldCheck, ShoppingCart, Trash2, X, Clock, Truck, PackageCheck, 
-  ClipboardCheck, ChevronDown, ChevronUp, AlertCircle, UserRound, Mail, MessageCircle
+  ClipboardCheck, ChevronDown, ChevronUp, AlertCircle, UserRound, Mail, MessageCircle, Copy
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { nigeriaCities, nigeriaStates } from "../data/nigeriaLocations";
@@ -13,6 +13,11 @@ import { nigeriaCities, nigeriaStates } from "../data/nigeriaLocations";
 type CartRow={product_id:string;variant_key:string;selected_variant:any;quantity:number;products:{name:string;slug:string;price:number;image_url:string;inventory:number;variants:any[]}|null};
 const whatsappNumber=(phone:string)=>{const digits=String(phone||"").replace(/\D/g,"");return digits.startsWith("0")?`234${digits.slice(1)}`:digits};
 const money=(value:number)=>`₦${value.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const BANK_ACCOUNTS=[
+  {id:"access",bank:"Access Bank",accountNumber:"1971465449",accountName:"Taiga Online Shopping Limited",logo:"/banks/access-bank.png"},
+  {id:"fcmb",bank:"FCMB",accountNumber:"2008277528",accountName:"Taiga Online Shopping Limited",logo:"/banks/fcmb.jpg"},
+  {id:"moniepoint",bank:"Moniepoint MFB",accountNumber:"6677085031",accountName:"Taiga Online Shopping Limited",logo:"/banks/moniepoint-mfb.png"},
+] as const;
 
 function addressInputRules(key:string){
   if(key==="first_name"||key==="last_name") return {minLength:2,maxLength:50,title:"Enter a valid name using letters, spaces, apostrophes or hyphens.",autoComplete:key==="first_name"?"given-name":"family-name"};
@@ -22,15 +27,15 @@ function addressInputRules(key:string){
   return {minLength:2,maxLength:80};
 }
 
-declare global { interface Window { PaystackPop?:new()=>{resumeTransaction:(accessCode:string)=>void} } }
-
 export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist"|"orders"|"account"|"inbox";user:User;onClose:()=>void;onChanged:()=>void}){
   const router=useRouter();
-  const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[checkout,setCheckout]=useState(false),[step,setStep]=useState(1),[done,setDone]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[addressError,setAddressError]=useState("");
-  const [supportPhone,setSupportPhone]=useState(""),[whatsappOrder,setWhatsappOrder]=useState("");
+  const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[checkout,setCheckout]=useState(false),[step,setStep]=useState(1),[error,setError]=useState(""),[addressError,setAddressError]=useState("");
+  const [supportPhone,setSupportPhone]=useState("");
   const [address,setAddress]=useState({first_name:"",last_name:"",phone:"",additional_phone:"",line1:"",additional_info:"",state:"",city:""});
   const [delivery,setDelivery]=useState<""|"standard">("");
   const [deliverySettings,setDeliverySettings]=useState({standard_shipping_fee:2500});
+  const [selectedBank,setSelectedBank]=useState<(typeof BANK_ACCOUNTS)[number]["id"]>("access");
+  const [copiedAccount,setCopiedAccount]=useState("");
   
   // Track expanded order row for detailed timeline
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -98,61 +103,36 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     onChanged();
   }
 
-  function loadPaystack(){
-    return new Promise<void>((resolve,reject)=>{
-      if(window.PaystackPop) return resolve();
-      const existing=document.querySelector<HTMLScriptElement>('script[data-paystack]');
-      if(existing){
-        if(existing.dataset.loaded==="true") return resolve();
-        existing.addEventListener("load",()=>resolve(),{once:true});
-        existing.addEventListener("error",()=>reject(new Error("Paystack could not be loaded")),{once:true});
-        return;
-      }
-      const script=document.createElement("script");
-      script.src="https://js.paystack.co/v2/inline.js";
-      script.dataset.paystack="true";
-      script.onload=()=>{
-        script.dataset.loaded="true";
-        resolve();
-      };
-      script.onerror=()=>reject(new Error("Paystack could not be loaded"));
-      document.head.appendChild(script);
-    });
-  }
-
-  async function payWithPaystack(){
-    setError("");
-    if(!delivery){
-      setStep(2);
-      setError("Select a delivery method before payment.");
-      return;
-    }
-    setBusy(true);
-    try{
-      await loadPaystack();
-      if(!window.PaystackPop) throw new Error("Paystack checkout did not initialize. Please refresh and try again.");
-      const {data:{session}}=await supabase.auth.getSession();
-      if(!session)throw new Error("Your session expired. Please sign in again.");
-      const initialization=await fetch("/api/paystack/initialize",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({delivery_method:delivery})});
-      const initialized=await initialization.json().catch(()=>null);
-      if(!initialization.ok||!initialized?.ok)throw new Error(initialized?.message||"Paystack could not be initialized.");
-      setBusy(false);
-      const popup=new window.PaystackPop();
-      popup.resumeTransaction(initialized.access_code);
-      const poll=window.setInterval(async()=>{const response=await fetch("/api/paystack/verify",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({reference:initialized.reference,address:{...address,country:"Nigeria",delivery_method:delivery,payment_method:"paystack",payment_reference:initialized.reference}})});if(response.ok){window.clearInterval(poll);const result=await response.json();const itemLines=rows.map(row=>`• ${row.products?.name||"Product"}${row.selected_variant?.label?` (${row.selected_variant.label})`:""} × ${row.quantity??1}`).join("\n");const message=["Hello Taiga, I have completed this order.","",`Order: ${result.order.order_number}`,itemLines,`Total: ${money(total)}`,`Customer: ${address.first_name} ${address.last_name}`,`Phone: ${address.phone}`,`Delivery address: ${address.line1}, ${address.city}, ${address.state}`,"","Please confirm that you received it."].filter(Boolean).join("\n");setWhatsappOrder(`https://wa.me/${whatsappNumber(supportPhone)}?text=${encodeURIComponent(message)}`);setDone(result.order.order_number);setCheckout(false);await load();onChanged()}},2500);
-      window.setTimeout(()=>window.clearInterval(poll),10*60*1000);
-    }catch(loadError:any){
-      setBusy(false);
-      setError(loadError?.message||"Paystack could not be loaded.");
-    }
-  }
-
   const subtotal=rows.reduce((sum,row)=>sum+Number(row.selected_variant?.price??(Array.isArray(row.products?.variants)?row.products.variants.find((variant:any)=>variant.id===row.variant_key)?.price:null)??row.products?.price??0)*(row.quantity??1),0),
         shipping=delivery?Math.max(2500,Number(deliverySettings.standard_shipping_fee)):null,
         total=subtotal+(shipping??0);
 
+  async function copyAccountNumber(accountNumber:string){
+    await navigator.clipboard.writeText(accountNumber);
+    setCopiedAccount(accountNumber);
+    window.setTimeout(()=>setCopiedAccount(current=>current===accountNumber?"":current),1800);
+  }
+
+  function bankTransferWhatsappUrl(){
+    const account=BANK_ACCOUNTS.find(item=>item.id===selectedBank)??BANK_ACCOUNTS[0];
+    const itemLines=rows.map(row=>`• ${row.products?.name||"Product"}${row.selected_variant?.label?` (${row.selected_variant.label})`:""} × ${row.quantity??1}`).join("\n");
+    const message=[
+      "Hello Taiga, I have made a bank transfer for this order.",
+      "",
+      itemLines,
+      `Total transferred: ${money(total)}`,
+      `Bank paid into: ${account.bank} · ${account.accountNumber}`,
+      `Customer: ${address.first_name} ${address.last_name}`,
+      `Phone: ${address.phone}`,
+      `Delivery address: ${address.line1}, ${address.city}, ${address.state}`,
+      "",
+      "I will attach my transfer receipt here. Please verify the payment and confirm my order.",
+    ].filter(Boolean).join("\n");
+    return `https://wa.me/${whatsappNumber(supportPhone)}?text=${encodeURIComponent(message)}`;
+  }
+
   return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:kind==="account"?<UserRound/>:kind==="inbox"?<Mail/>:<Package/>}<h2>{kind==="cart"?`Your Cart${cartItemCount>0?` (${cartItemCount})`:""}`:kind==="wishlist"?"Saved items":kind==="account"?"My account":kind==="inbox"?"Inbox":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
-  {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:kind==="account"?<div className="account-panel-content"><div className="account-avatar">{String(rows[0]?.full_name||rows[0]?.email||"T").charAt(0).toUpperCase()}</div><span>Taiga customer</span><h3>{rows[0]?.full_name}</h3><p>{rows[0]?.email}</p><dl><div><dt>Account status</dt><dd>Active</dd></div><div><dt>Member since</dt><dd>{rows[0]?.created_at?new Date(rows[0].created_at).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}):"Recently joined"}</dd></div></dl><p>Your profile is connected to your secure Taiga sign-in.</p></div>:kind==="inbox"?<div className="inbox-list">{rows.length?rows.map(row=><article key={row.id}><span><PackageCheck/></span><div><strong>Order {row.order_number} is {String(row.status).replaceAll("_"," ")}</strong><p>Your order total is {money(Number(row.total))}. Open Orders for full tracking details.</p><small>{new Date(row.created_at).toLocaleString()}</small></div></article>):<div className="panel-empty"><Mail/><h3>Your inbox is clear</h3><p>Updates about your orders will appear here automatically.</p></div>}</div>:done?<div className="success-state"><div className="success-icon"><CheckCircle2/></div><span>Order confirmed</span><h3>Thank you for your order</h3><p>Your payment was confirmed and your order is being prepared.</p><div className="success-reference"><small>Order reference</small><strong>{done}</strong></div><button onClick={onClose}>Continue shopping</button></div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
+  {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:kind==="account"?<div className="account-panel-content"><div className="account-avatar">{String(rows[0]?.full_name||rows[0]?.email||"T").charAt(0).toUpperCase()}</div><span>Taiga customer</span><h3>{rows[0]?.full_name}</h3><p>{rows[0]?.email}</p><dl><div><dt>Account status</dt><dd>Active</dd></div><div><dt>Member since</dt><dd>{rows[0]?.created_at?new Date(rows[0].created_at).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}):"Recently joined"}</dd></div></dl><p>Your profile is connected to your secure Taiga sign-in.</p></div>:kind==="inbox"?<div className="inbox-list">{rows.length?rows.map(row=><article key={row.id}><span><PackageCheck/></span><div><strong>Order {row.order_number} is {String(row.status).replaceAll("_"," ")}</strong><p>Your order total is {money(Number(row.total))}. Open Orders for full tracking details.</p><small>{new Date(row.created_at).toLocaleString()}</small></div></article>):<div className="panel-empty"><Mail/><h3>Your inbox is clear</h3><p>Updates about your orders will appear here automatically.</p></div>}</div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
     
     {kind==="orders" ? rows.map(row=>{
       const isExpanded = expandedOrder === row.id;
@@ -259,7 +239,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
       );
     }) : rows.map(row=>{const variant=Array.isArray(row.products?.variants)?row.products.variants.find((item:any)=>item.id===row.variant_key):null,stock=Number(variant?.inventory??row.products?.inventory??0),price=Number(row.selected_variant?.price??variant?.price??row.products?.price??0),options=row.selected_variant?.options??variant?.options;return <article className="cart-row" key={`${row.product_id}-${row.variant_key||"default"}`}><img src={row.selected_variant?.image_url||variant?.image_url||row.products?.image_url} alt={row.products?.name||"Cart product"}/><div><h3>{row.products?.name}</h3><span className="cart-variant">{options?Object.entries(options).map(([key,value])=>`${key}: ${value}`).join(" · "):"Standard item"}</span><strong>{money(price)}</strong><small className="stock-note">{stock} units available</small>{kind==="cart"?<div className="qty"><button onClick={()=>quantity(row,row.quantity-1)} aria-label="Decrease quantity"><Minus/></button><span>{row.quantity}</span><button onClick={()=>quantity(row,row.quantity+1)} aria-label="Increase quantity"><Plus/></button></div>:<button className="move-cart" onClick={()=>moveToCart(row)}>{Array.isArray(row.products?.variants)&&row.products.variants.length?"Choose options":"Add to cart"}</button>}</div><button className="remove-row" onClick={()=>remove(row.product_id,row.variant_key)} aria-label={`Remove ${row.products?.name||"product"}`}><Trash2/><span>Remove</span></button></article>})}
   </div>}
-  {kind==="cart"&&rows.length>0&&!done&&<footer>
+  {kind==="cart"&&rows.length>0&&<footer>
     <h4>Order summary</h4>
     <div><span>Subtotal</span><strong>{money(subtotal)}</strong></div>
     <div><span>Delivery</span><strong>{shipping===null?"Calculated at checkout":shipping===0?"FREE":money(shipping)}</strong></div>
@@ -268,7 +248,6 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   {checkout&&<div className="checkout-screen"><div className="checkout-main"><button className="back-checkout" onClick={()=>setCheckout(false)}>← Back to cart</button><div className="checkout-steps">{["Customer address","Delivery details","Payment method"].map((label,index)=><button className={step===index+1?"active":step>index+1?"complete":""} onClick={()=>step>index+1&&setStep(index+1)} key={label}><span>{step>index+1?<Check/>:index+1}</span>{label}</button>)}</div>
   {step===1&&<form className="address-form validated-form" noValidate onSubmit={event=>{event.preventDefault();if(!validateAddress())return;setAddress(current=>Object.fromEntries(Object.entries(current).map(([key,value])=>[key,value.trim()])) as typeof current);setStep(2)}}><div className="checkout-title"><span>Step 1 of 3</span><h3>Where should we deliver?</h3><p>Enter the recipient’s Nigerian delivery address.</p></div><div className="form-grid">{Object.entries(address).map(([key,value])=>key==="state"?<label key={key}>State<select value={value} onChange={event=>{setAddressError("");setAddress({...address,state:event.target.value,city:""})}} required><option value="">Select a state</option>{nigeriaStates.map(state=><option key={state} value={state}>{state}</option>)}</select></label>:key==="city"?<label key={key}>City<select value={value} onChange={event=>{setAddressError("");setAddress({...address,city:event.target.value})}} disabled={!address.state} required><option value="">{address.state?"Select a city":"Select a state first"}</option>{(nigeriaCities[address.state]??[]).map(city=><option key={city} value={city}>{city}</option>)}</select></label>:<label key={key}>{key==="line1"?"Street address":key.replaceAll("_"," ")}<input {...addressInputRules(key)} value={value} onChange={event=>{setAddressError("");setAddress({...address,[key]:event.target.value})}} required={!['additional_phone','additional_info'].includes(key)} placeholder={key==="phone"?"e.g. 08030000000":""}/></label>)}</div>{addressError&&<div className="form-error" role="alert"><AlertCircle/>{addressError}</div>}<div className="step-actions"><button type="button" onClick={()=>setCheckout(false)}>Cancel</button><button>Save & continue</button></div></form>}
   {step===2&&<div className="choice-step delivery-choice"><div className="checkout-title"><span>Step 2 of 3</span><h3>Delivery details</h3><p>Taiga currently provides doorstep delivery only.</p></div><div className="selected delivery-only-card"><Truck/><div><strong>Standard delivery</strong><span>Doorstep delivery in 2–5 business days</span><small>Nationwide delivery to your saved address. Fee starts from ₦2,500.</small></div><b>{money(Math.max(2500,Number(deliverySettings.standard_shipping_fee)))}</b></div><div className="step-actions"><button onClick={()=>setStep(1)}>Back</button><button onClick={()=>{setDelivery("standard");setStep(3)}}>Continue</button></div></div>}
-  {step===3&&<div className="choice-step"><div className="checkout-title"><span>Step 3 of 3</span><h3>Pay securely with Paystack</h3><p>Choose card, bank transfer, bank account or USSD in the secure Paystack window.</p></div><div className="paystack-option selected"><span className="paystack-mark">paystack</span><div><strong>Paystack secure checkout</strong><small>Your payment information is processed securely by Paystack.</small></div><CreditCard/></div><div className="secure-note"><ShieldCheck/> Your order is created only after Paystack confirms the payment.</div>{error&&<div className="checkout-error">{error}</div>}<div className="step-actions"><button onClick={()=>setStep(2)}>Back</button><button onClick={payWithPaystack} disabled={busy}>{busy?"Connecting to Paystack…":`Pay ${money(total)}`}</button></div></div>}</div><aside className="checkout-summary"><h3>Order summary</h3><div><span>Items total ({rows.reduce((sum,row)=>sum+(row.quantity??1),0)})</span><b>{money(subtotal)}</b></div><div><span>Delivery</span><b>{shipping===null?"Select a method":shipping===0?"FREE":money(shipping)}</b></div><div className="summary-total"><span>Total</span><strong>{money(total)}</strong></div><p>All prices and payments are in Nigerian naira.</p></aside></div>}
-  {done&&whatsappOrder&&<div className="post-order-whatsapp"><a className="send-order-whatsapp" href={whatsappOrder} target="_blank" rel="noreferrer"><MessageCircle/> Send order on WhatsApp</a><small>WhatsApp will open with your order details. Review them, then press Send.</small></div>}
+  {step===3&&<div className="choice-step bank-transfer-step"><div className="checkout-title"><span>Step 3 of 3</span><h3>Pay by bank transfer</h3><p>Transfer exactly <strong>{money(total)}</strong> to any Taiga account below, then send your receipt on WhatsApp for verification.</p></div><div className="bank-account-grid">{BANK_ACCOUNTS.map(account=><article className={`bank-account-card ${selectedBank===account.id?"selected":""}`} key={account.id}><button type="button" className="bank-account-select" onClick={()=>setSelectedBank(account.id)} aria-pressed={selectedBank===account.id}><span className="bank-logo"><img src={account.logo} alt={`${account.bank} logo`}/></span><span className="bank-account-copy"><small>{account.bank}</small><strong>{account.accountNumber}</strong><span>{account.accountName}</span></span><span className="bank-selected-mark">{selectedBank===account.id?<Check/>:null}</span></button><button type="button" className="copy-account" onClick={()=>copyAccountNumber(account.accountNumber)}><Copy/>{copiedAccount===account.accountNumber?"Copied":"Copy account"}</button></article>)}</div><div className="secure-note bank-transfer-note"><ShieldCheck/> Payment is verified manually. Your order is confirmed only after Taiga receives your transfer receipt and verifies the funds.</div>{error&&<div className="checkout-error">{error}</div>}<div className="step-actions"><button onClick={()=>setStep(2)}>Back</button><a className="bank-proof-action" href={bankTransferWhatsappUrl()} target="_blank" rel="noreferrer"><MessageCircle/> I&apos;ve transferred — send proof</a></div></div>}</div><aside className="checkout-summary"><h3>Order summary</h3><div><span>Items total ({rows.reduce((sum,row)=>sum+(row.quantity??1),0)})</span><b>{money(subtotal)}</b></div><div><span>Delivery</span><b>{shipping===null?"Select a method":shipping===0?"FREE":money(shipping)}</b></div><div className="summary-total"><span>Total to transfer</span><strong>{money(total)}</strong></div><p>All prices and transfers are in Nigerian naira. Keep your receipt until your order is confirmed.</p></aside></div>}
   </aside></div>
 }

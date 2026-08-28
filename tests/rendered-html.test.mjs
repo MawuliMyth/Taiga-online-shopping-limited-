@@ -23,7 +23,7 @@ test("server-renders the Taiga storefront", async () => {
   assert.match(html, /Returns &amp; refunds/);
   assert.match(html, /Privacy policy/);
   assert.match(html, /Terms &amp; conditions/);
-  assert.match(html, /Visa · Mastercard · Verve · Bank transfer/);
+  assert.match(html, /Bank transfer · Manual payment verification/);
 });
 
 test("server-renders the protected admin entry", async () => {

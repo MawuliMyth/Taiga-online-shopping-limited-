@@ -3,6 +3,7 @@ import { apiError, authenticatedUser, serverClients } from "../../../../lib/serv
 export async function POST(request:Request){
   try{
     const user=await authenticatedUser(request);
+    if(process.env.PAYSTACK_CHECKOUT_ENABLED!=="true") throw new Error("Paystack checkout is temporarily disabled.");
     const {delivery_method}=await request.json() as {delivery_method?:string};
     if(!user.email) throw new Error("Your account needs an email address.");
     if(delivery_method!=="standard") throw new Error("Only standard delivery is available.");

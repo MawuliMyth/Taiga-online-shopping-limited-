@@ -4,7 +4,9 @@ Responsive Nigerian e-commerce storefront and protected administration dashboard
 
 ## Vercel environment variables
 
-Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY`, and `PAYSTACK_SECRET_KEY` in the Vercel project settings. Never commit `.env.local`.
+Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the hosting project settings. Never commit `.env.local`.
+
+Paystack checkout is currently disabled while the store accepts manual bank transfers. To restore it later, configure `PAYSTACK_SECRET_KEY` and set `PAYSTACK_CHECKOUT_ENABLED=true` after reconnecting the Paystack checkout UI.
 
 ## Original project notes
 
