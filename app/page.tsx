@@ -37,9 +37,9 @@ const departmentDetails: Record<string,{title:string;items:string[]}[]> = {
 const categoryAliases:Record<string,string>={Computing:"Computers and Accessories",Mobile:"Phones and tablets",Groceries:"Drinks and Groceries",Beauty:"Others"};
 
 const storefrontBanners=[
-  {id:"taiga-hero",placement:"hero",badge:"Everything you need, delivered",title:"Shop smarter.",accent_text:"Live better.",subtitle:"Real value across electronics, fashion, home essentials and groceries — delivered nationwide.",image_url:"/banners/taiga-shopping-hero.png",image_urls:["/banners/taiga-shopping-hero.png"],cta_label:"Start shopping",cta_link:"#deals",background_color:"#10231c"},
-  {id:"taiga-tech",placement:"side_top",badge:"Tech essentials",title:"Upgrade your everyday",image_url:"/banners/taiga-tech-deals.png",cta_label:"Shop electronics",cta_link:"/shop?category=Electronics",background_color:"#0b2c22"},
-  {id:"taiga-style",placement:"side_bottom",badge:"Fresh finds",title:"Style, home & more",image_url:"/banners/taiga-everyday-style.png",cta_label:"Explore the store",cta_link:"/shop",background_color:"#f5eadb"},
+  {id:"taiga-hero",placement:"hero",badge:"Everything you need, delivered",title:"Shop smarter.",accent_text:"Live better.",subtitle:"Real value across electronics, fashion, home essentials and groceries — delivered nationwide.",image_url:"/banners/taiga-shopping-hero.jpg",image_urls:["/banners/taiga-shopping-hero.jpg"],cta_label:"Start shopping",cta_link:"#deals",background_color:"#10231c"},
+  {id:"taiga-tech",placement:"side_top",badge:"Tech essentials",title:"Upgrade your everyday",image_url:"/banners/taiga-tech-deals.jpg",cta_label:"Shop electronics",cta_link:"/shop?category=Electronics",background_color:"#0b2c22"},
+  {id:"taiga-style",placement:"side_bottom",badge:"Fresh finds",title:"Style, home & more",image_url:"/banners/taiga-everyday-style.jpg",cta_label:"Explore the store",cta_link:"/shop",background_color:"#f5eadb"},
 ];
 
 function whatsappUrl(phone:string){
@@ -174,7 +174,7 @@ export default function Home() {
 
   function flash(text:string){setNotice(text); window.setTimeout(()=>setNotice(""),2400)}
   function requireAuth(reason:string){setAuthReason(reason);setShowAuth(true)}
-  async function openProtectedPanel(target:"cart"|"wishlist"|"orders"|"account"|"inbox",reason:string){setAccountMenuOpen(false);const current=user??(await supabase.auth.getSession()).data.session?.user??null;if(current){setUser(current);setShowAuth(false);setPanel(target);return}requireAuth(reason)}
+  async function openProtectedPanel(target:"cart"|"wishlist"|"orders"|"account"|"inbox",reason:string){setAccountMenuOpen(false);const current=user??(await supabase.auth.getSession()).data.session?.user??null;if(current){setUser(current);setShowAuth(false);setPanel(target);return}setPanel(target);requireAuth(reason)}
   async function signOut(){setAccountMenuOpen(false);setPanel(null);await supabase.auth.signOut();flash("You have signed out safely")}
   
   async function addToCart(product: Product){
@@ -251,20 +251,20 @@ export default function Home() {
             <button className="account-trigger" aria-haspopup="menu" aria-expanded={accountMenuOpen} onClick={()=>user?setAccountMenuOpen(open=>!open):openProtectedPanel("account","Please sign in first to access your account.")}><CircleUserRound /><span>{!authReady?"Checking account":user?`Hi, ${user.user_metadata?.full_name?.split(" ")[0]||user.email?.split("@")[0]}`:"Hello, sign in"}<small>{user?"My account":"Account"}</small></span>{user&&<ChevronDown className={accountMenuOpen?"rotated":""} size={15}/>}</button>
             {user&&accountMenuOpen&&<div className="account-dropdown" role="menu">
               <button role="menuitem" onClick={()=>window.location.href="/account/account"}><UserRound/><span>My Account<small>Profile and account details</small></span></button>
-              <button role="menuitem" onClick={()=>window.location.href="/account/orders"}><ShoppingBag/><span>Orders<small>Track current purchases</small></span></button>
+              <button role="menuitem" onClick={()=>openProtectedPanel("orders","Please sign in first to track your orders.")}><ShoppingBag/><span>Orders<small>Track current purchases</small></span></button>
               <button role="menuitem" onClick={()=>window.location.href="/account/inbox"}><Mail/><span>Inbox<small>Order updates and notices</small></span></button>
-              <button role="menuitem" onClick={()=>window.location.href="/account/wishlist"}><Heart/><span>Wishlist<small>{wishlist.size} saved {wishlist.size===1?"item":"items"}</small></span></button>
+              <button role="menuitem" onClick={()=>openProtectedPanel("wishlist","Please sign in first to view your wishlist.")}><Heart/><span>Wishlist<small>{wishlist.size} saved {wishlist.size===1?"item":"items"}</small></span></button>
               <button className="account-signout" role="menuitem" onClick={signOut}><LogOut/><span>Sign out<small>End this session</small></span></button>
             </div>}
           </div>
-          <button className="icon-action" onClick={()=>window.location.href="/account/wishlist"} aria-label={`Open wishlist${wishlist.size>0?`, ${wishlist.size} saved item${wishlist.size===1?"":"s"}`:""}`}><Heart />{wishlist.size>0&&<b data-count={wishlist.size}>{wishlist.size}</b>}</button>
-          <button className="icon-action cart-action" onClick={()=>window.location.href="/account/cart"} aria-label={`Open cart${cart>0?`, ${cart} item${cart===1?"":"s"}`:""}`}><ShoppingCart /><span>Cart</span>{cart>0&&<b data-count={cart}>{cart}</b>}</button>
+          <button className="icon-action" onClick={()=>openProtectedPanel("wishlist","Please sign in first to view your wishlist.")} aria-label={`Open wishlist${wishlist.size>0?`, ${wishlist.size} saved item${wishlist.size===1?"":"s"}`:""}`}><Heart />{wishlist.size>0&&<b data-count={wishlist.size}>{wishlist.size}</b>}</button>
+          <button className="icon-action cart-action" onClick={()=>openProtectedPanel("cart","Please sign in first to view and manage your cart.")} aria-label={`Open cart${cart>0?`, ${cart} item${cart===1?"":"s"}`:""}`}><ShoppingCart /><span>Cart</span>{cart>0&&<b data-count={cart}>{cart}</b>}</button>
         </div>
       </div>
       <nav className="nav wrap">
         <button className="departments" onMouseEnter={()=>setDepartmentsOpen(true)} onFocus={()=>setDepartmentsOpen(true)} onClick={()=>setDepartmentsOpen(!departmentsOpen)}><Menu size={17} /> Categories <ChevronDown size={15} /></button>
         <Link href="/shop">All products</Link><Link href="/shop?sort=deals">Today&apos;s deals</Link><Link href="/shop?sort=new">New arrivals</Link><Link href="/shop?sort=popular">Most wanted</Link>
-        <button onClick={() => window.location.href="/account/orders"} className="admin-link" style={{ background: "transparent", border: "0", cursor: "pointer", fontSize: "inherit", fontWeight: "inherit", padding: "8px 0" }}>
+        <button onClick={()=>openProtectedPanel("orders","Please sign in first to track your orders.")} className="admin-link" style={{ background: "transparent", border: "0", cursor: "pointer", fontSize: "inherit", fontWeight: "inherit", padding: "8px 0" }}>
           <ClipboardCheck size={16} /> Track Order
         </button>
       </nav>
@@ -274,13 +274,13 @@ export default function Home() {
     <main>
       {!bannersLoaded?<section className="hero wrap hero-banner-shimmer" aria-label="Loading promotions"><div/><div/></section>:heroBanner&&<section className={`hero wrap ${!sideTop&&!sideBottom?"hero-only":""}`}>
         <div className={`hero-main ${heroImages.length?"managed-banner":""}`} style={heroImages.length?{backgroundColor:heroBanner?.background_color||undefined}:undefined} onMouseEnter={()=>setHeroPaused(true)} onMouseLeave={()=>setHeroPaused(false)}>
-          {heroImages.length>0&&<div className="hero-slides" aria-live="polite">{heroImages.map((image:string,index:number)=><img key={`${image}-${index}`} className={index===heroSlide?"active":""} src={image} alt={index===heroSlide?`${heroBanner?.title||"Promotion"} slide ${index+1}`:""}/>)}</div>}
+          {heroImages.length>0&&<div className="hero-slides" aria-live="polite">{heroImages.map((image:string,index:number)=><img key={`${image}-${index}`} className={index===heroSlide?"active":""} src={image} alt={index===heroSlide?`${heroBanner?.title||"Promotion"} slide ${index+1}`:""} decoding="async" fetchPriority={index===0?"high":"auto"}/>)}</div>}
           <div className="hero-copy"><span className="eyebrow"><Zap size={15} /> {heroBanner.badge}</span><h1>{heroBanner.title}<br/>{heroBanner.accent_text&&<em>{heroBanner.accent_text}</em>}</h1>{heroBanner.subtitle&&<p>{heroBanner.subtitle}</p>}<a className="hero-cta" href={heroBanner.cta_link}>{heroBanner.cta_label} <ArrowRight size={18} /></a><div className="hero-trust"><BadgeCheck size={18} /> Genuine products <span>•</span> Nationwide delivery</div></div>
           {heroImages.length>1&&<><button className="hero-slide-arrow previous" onClick={()=>setHeroSlide(index=>(index-1+heroImages.length)%heroImages.length)} aria-label="Previous banner"><ChevronLeft/></button><button className="hero-slide-arrow next" onClick={()=>setHeroSlide(index=>(index+1)%heroImages.length)} aria-label="Next banner"><ChevronRight/></button><div className="hero-slide-dots" aria-label="Banner slides">{heroImages.map((_:string,index:number)=><button key={index} className={index===heroSlide?"active":""} onClick={()=>setHeroSlide(index)} aria-label={`Show banner ${index+1}`}><span/></button>)}</div></>}
         </div>
         {(sideTop||sideBottom)&&<div className="hero-side">
-          {sideTop&&<article className="mini-promo audio" style={{background:sideTop.background_color}}><div><small>{sideTop.badge}</small><h3>{sideTop.title}</h3><a href={sideTop.cta_link}>{sideTop.cta_label} <ArrowRight size={14}/></a></div><img src={sideTop.image_url} alt={sideTop.title} /></article>}
-          {sideBottom&&<article className="mini-promo style" style={{background:sideBottom.background_color}}><div><small>{sideBottom.badge}</small><h3>{sideBottom.title}</h3><a href={sideBottom.cta_link}>{sideBottom.cta_label} <ArrowRight size={14}/></a></div><img src={sideBottom.image_url} alt={sideBottom.title} /></article>}
+          {sideTop&&<article className="mini-promo audio" style={{background:sideTop.background_color}}><div><small>{sideTop.badge}</small><h3>{sideTop.title}</h3><a href={sideTop.cta_link}>{sideTop.cta_label} <ArrowRight size={14}/></a></div><img src={sideTop.image_url} alt={sideTop.title} decoding="async" /></article>}
+          {sideBottom&&<article className="mini-promo style" style={{background:sideBottom.background_color}}><div><small>{sideBottom.badge}</small><h3>{sideBottom.title}</h3><a href={sideBottom.cta_link}>{sideBottom.cta_label} <ArrowRight size={14}/></a></div><img src={sideBottom.image_url} alt={sideBottom.title} decoding="async" /></article>}
         </div>}
       </section>}
 
