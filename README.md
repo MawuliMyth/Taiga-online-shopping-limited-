@@ -2,7 +2,7 @@
 
 Responsive Nigerian e-commerce storefront and protected administration dashboard powered by Next.js, Supabase, and Paystack.
 
-## Vercel environment variables
+## Hosting environment variables
 
 Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the hosting project settings. Never commit `.env.local`.
 
