@@ -46,7 +46,7 @@ grant execute on function public.checkout_cart(jsonb) to authenticated;
 create table if not exists public.store_settings (
   id integer primary key default 1 check (id=1),
   store_name text not null default 'Taiga Online Shopping Limited',
-  support_email text not null default 'support@taiga.ng',
+  support_email text not null default 'support@taigaonlineshoppinglimited.com',
   free_shipping_threshold numeric(12,2) not null default 75,
   updated_at timestamptz not null default now()
 );
@@ -115,6 +115,6 @@ select id,image_url,name,0 from public.products p where not exists(select 1 from
 -- Keep the public brand settings aligned for existing installations.
 update public.store_settings
 set store_name = 'Taiga Online Shopping Limited',
-    support_email = 'support@taiga.ng',
+    support_email = 'support@taigaonlineshoppinglimited.com',
     updated_at = now()
 where id = 1;
