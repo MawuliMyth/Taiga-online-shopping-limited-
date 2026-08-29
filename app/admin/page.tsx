@@ -6,7 +6,7 @@ import {
   LayoutDashboard, LogOut, Package, Plus, Search, Settings, 
   ShoppingCart, Store, Tags, Trash2, Truck, Users, Wallet, X, PackageCheck,
   TrendingUp, ArrowUpRight, ArrowDownRight, Edit3, ClipboardCheck,
-  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck, RotateCcw, Download
+  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck, RotateCcw, Download, KeyRound, Smartphone
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useSessionTimeout } from "../../lib/use-session-timeout";
@@ -29,9 +29,16 @@ const emptyProduct={name:"",slug:"",description:"",price:"",compare_at_price:"",
 
 export default function Admin(){
   const [tab,setTab]=useState<Tab>("Dashboard"),
-        [access,setAccess]=useState<"checking"|"guest"|"denied"|"allowed"|"setup">("checking"),
+        [access,setAccess]=useState<"checking"|"guest"|"denied"|"allowed"|"setup"|"mfa_enroll"|"mfa_verify">("checking"),
         [auth,setAuth]=useState(false),
-        [adminUser,setAdminUser]=useState({name:"Administrator",email:""});
+        [adminUser,setAdminUser]=useState({name:"Administrator",email:""}),
+        [adminRole,setAdminRole]=useState<"admin"|"owner"|null>(null),
+        [mfaFactorId,setMfaFactorId]=useState(""),
+        [mfaQr,setMfaQr]=useState(""),
+        [mfaSecret,setMfaSecret]=useState(""),
+        [mfaCode,setMfaCode]=useState(""),
+        [mfaBusy,setMfaBusy]=useState(false),
+        [mfaMessage,setMfaMessage]=useState("");
   
   const [products,setProducts]=useState<any[]>([]),
         [orders,setOrders]=useState<any[]>([]),
@@ -77,6 +84,7 @@ export default function Admin(){
     const {data:{user}}=await supabase.auth.getUser();
     if(!user){
       setAdminUser({name:"Administrator",email:""});
+      setAdminRole(null);
       return setAccess("guest");
     }
     const {data,error}=await supabase.from("profiles").select("role,full_name").eq("id",user.id).maybeSingle();
@@ -85,7 +93,36 @@ export default function Admin(){
       name: data?.full_name||user.user_metadata?.full_name||user.email?.split("@")[0]||"Administrator",
       email: user.email||""
     });
-    setAccess(data?.role==="admin"?"allowed":"denied");
+    if(data?.role!=="admin"&&data?.role!=="owner"){
+      setAdminRole(null);
+      return setAccess("denied");
+    }
+    setAdminRole(data.role);
+    const {data:assurance,error:assuranceError}=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if(assuranceError)return setAccess("setup");
+    if(assurance.currentLevel==="aal2")return setAccess("allowed");
+    const {data:factors,error:factorsError}=await supabase.auth.mfa.listFactors();
+    if(factorsError)return setAccess("setup");
+    const verified=factors.all.find(factor=>factor.status==="verified");
+    if(verified){setMfaFactorId(verified.id);return setAccess("mfa_verify")}
+    setAccess("mfa_enroll");
+  }
+
+  async function beginMfaEnrollment(){
+    setMfaBusy(true);setMfaMessage("");
+    const {data,error}=await supabase.auth.mfa.enroll({factorType:"totp",friendlyName:"Taiga Admin Authenticator"});
+    setMfaBusy(false);
+    if(error)return setMfaMessage(error.message);
+    setMfaFactorId(data.id);setMfaQr(data.totp.qr_code);setMfaSecret(data.totp.secret);
+  }
+
+  async function verifyMfa(){
+    if(!/^\d{6}$/.test(mfaCode))return setMfaMessage("Enter the six-digit code from your authenticator app.");
+    setMfaBusy(true);setMfaMessage("");
+    const {error}=await supabase.auth.mfa.challengeAndVerify({factorId:mfaFactorId,code:mfaCode});
+    setMfaBusy(false);
+    if(error)return setMfaMessage("That code was not accepted. Wait for a new code and try again.");
+    setMfaCode("");setMfaQr("");setMfaSecret("");setAccess("allowed");
   }
 
   async function load(){
@@ -109,7 +146,7 @@ export default function Admin(){
     setOrders(o.data??[]);
     setCategories(cats.data??[]);
     setCustomers((users.data??[]).filter((profile:any)=>profile.role==="customer"));
-    setAdministrators((users.data??[]).filter((profile:any)=>profile.role==="admin"));
+    setAdministrators((users.data??[]).filter((profile:any)=>profile.role==="admin"||profile.role==="owner"));
     setAuditLogs(logsResult.data??[]);
     setSubscribers(subs.data??[]);
     if(settingsResult.data) setStoreSettings(settingsResult.data);
@@ -406,11 +443,18 @@ export default function Admin(){
       <div style={{width:"min(440px,100%)",background:"white",border:"1px solid #dfe7e3",borderRadius:18,padding:"clamp(28px,5vw,46px)",boxShadow:"0 24px 70px rgba(15,40,31,.09)"}}>
         <div style={{width:52,height:52,display:"grid",placeItems:"center",borderRadius:14,background:"#e8f6f0",color:"#0d7a5f",marginBottom:24}}><Store size={25}/></div>
         <span style={{fontSize:11,fontWeight:900,letterSpacing:".13em",textTransform:"uppercase",color:"#0d7a5f"}}>Administration portal</span>
-        <h2 style={{fontSize:30,lineHeight:1.15,letterSpacing:"-.035em",margin:"9px 0 10px",fontWeight:900}}>{access==="checking"?"Verifying access…":access==="setup"?"Database update needed":access==="denied"?"Access restricted":"Welcome back"}</h2>
-        <p style={{fontSize:14,lineHeight:1.65,color:"#64736d",marginBottom:26}}>{access==="setup"?"The commerce database must be upgraded before administrators can continue.":access==="denied"?"This account is signed in, but it has not been assigned the administrator role.":access==="checking"?"Securely checking your administrator session.":"Sign in with an authorized administrator account to continue."}</p>
+        <h2 style={{fontSize:30,lineHeight:1.15,letterSpacing:"-.035em",margin:"9px 0 10px",fontWeight:900}}>{access==="checking"?"Verifying access…":access==="setup"?"Security update needed":access==="denied"?"Access restricted":access==="mfa_enroll"?"Protect this account":access==="mfa_verify"?"Two-factor verification":"Welcome back"}</h2>
+        <p style={{fontSize:14,lineHeight:1.65,color:"#64736d",marginBottom:26}}>{access==="setup"?"The security database update must be completed before administrators can continue.":access==="denied"?"This account is signed in, but it has not been assigned an administrator role.":access==="checking"?"Securely checking your administrator session.":access==="mfa_enroll"?"Set up an authenticator app before this administrator account can enter the dashboard.":access==="mfa_verify"?"Enter a fresh code from your authenticator app to unlock the dashboard.":"Sign in with an authorized administrator account to continue."}</p>
         {access==="checking"&&<div style={{height:4,borderRadius:999,background:"#e5ece9",overflow:"hidden",marginBottom:22}}><span style={{display:"block",width:"58%",height:"100%",background:"#0d7a5f",borderRadius:999}}/></div>}
         {access==="guest"&&<button onClick={()=>setAuth(true)} style={{width:"100%",minHeight:50,border:0,borderRadius:10,background:"#0d7a5f",color:"white",fontSize:14,fontWeight:800,cursor:"pointer",boxShadow:"0 10px 24px rgba(13,122,95,.2)"}}>Sign in securely</button>}
         {access==="denied"&&<button onClick={()=>supabase.auth.signOut()} style={{width:"100%",minHeight:50,border:"1px solid #dfe7e3",borderRadius:10,background:"white",color:"#13201c",fontSize:14,fontWeight:800,cursor:"pointer"}}>Sign out and use another account</button>}
+        {access==="mfa_enroll"&&!mfaQr&&<button onClick={beginMfaEnrollment} disabled={mfaBusy} style={{width:"100%",minHeight:50,border:0,borderRadius:10,background:"#0d7a5f",color:"white",fontSize:14,fontWeight:800,cursor:"pointer"}}><Smartphone size={17} style={{verticalAlign:"middle",marginRight:8}}/>{mfaBusy?"Preparing…":"Set up authenticator"}</button>}
+        {(access==="mfa_verify"||mfaQr)&&<div style={{display:"grid",gap:14}}>
+          {mfaQr&&<div style={{display:"grid",gap:10,textAlign:"center"}}><img src={mfaQr} alt="QR code for Taiga admin two-factor authentication" style={{width:190,height:190,margin:"0 auto",padding:8,border:"1px solid #dfe7e3",borderRadius:12}}/><small style={{color:"#64736d"}}>Scan this QR code with Google Authenticator, Microsoft Authenticator, Authy, or 1Password.</small><details><summary style={{fontSize:12,color:"#0d7a5f",cursor:"pointer"}}>Can’t scan the QR code?</summary><code style={{display:"block",marginTop:8,padding:10,background:"#f4f7f5",borderRadius:8,fontSize:11,wordBreak:"break-all"}}>{mfaSecret}</code></details></div>}
+          <label style={{fontSize:11,fontWeight:800}}>Six-digit authenticator code<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event=>setMfaCode(event.target.value.replace(/\D/g,""))} placeholder="000000" style={{display:"block",width:"100%",height:50,marginTop:7,border:"1px solid #dfe7e3",borderRadius:10,padding:"0 14px",fontSize:20,letterSpacing:".3em",textAlign:"center"}}/></label>
+          {mfaMessage&&<p role="alert" style={{margin:0,color:"#b42318",fontSize:12}}>{mfaMessage}</p>}
+          <button onClick={verifyMfa} disabled={mfaBusy||!mfaFactorId} style={{width:"100%",minHeight:50,border:0,borderRadius:10,background:"#0d7a5f",color:"white",fontSize:14,fontWeight:800,cursor:"pointer"}}><KeyRound size={17} style={{verticalAlign:"middle",marginRight:8}}/>{mfaBusy?"Verifying…":"Verify and open dashboard"}</button>
+        </div>}
         <Link href="/" style={{display:"block",marginTop:18,textAlign:"center",color:"#0d7a5f",fontSize:13,fontWeight:750,textDecoration:"none"}}>← Return to storefront</Link>
       </div>
     </section>
@@ -445,7 +489,7 @@ export default function Admin(){
           <div className="admin-avatar">{adminUser.name.split(/\s+/).slice(0,2).map(n=>n[0]).join("").toUpperCase()}</div>
           <div style={{ textAlign: "left" }}>
             <strong style={{ display: "block" }}>{adminUser.name}</strong>
-            <small style={{ display: "block", color: "var(--muted)", fontSize: "10px" }}>{adminUser.email||"Administrator"}</small>
+            <small style={{ display: "block", color: "var(--muted)", fontSize: "10px" }}>{adminRole==="owner"?"Super admin":adminUser.email||"Administrator"}</small>
           </div>
           <ChevronDown size={14}/>
         </button>
@@ -665,7 +709,7 @@ export default function Admin(){
                       <td style={{ padding: "16px" }}>
                         <span className="role-pill" style={{ textTransform: "uppercase" }}>{c.role}</span>
                       </td>
-                      <td style={{ padding: "16px", fontSize: "13px", color: "var(--muted)" }}>{new Date(c.created_at).toLocaleDateString()}</td><td><button className="banner-edit-action" onClick={()=>setAdministrator(c.id,true)}>Make admin</button></td>
+                      <td style={{ padding: "16px", fontSize: "13px", color: "var(--muted)" }}>{new Date(c.created_at).toLocaleDateString()}</td><td>{adminRole==="owner"?<button className="banner-edit-action" onClick={()=>setAdministrator(c.id,true)}>Make admin</button>:<span style={{fontSize:12,color:"var(--muted)"}}>Owner approval required</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -674,7 +718,7 @@ export default function Admin(){
             </div>
           )}
 
-          {tab==="Administrators"&&<div className="admin-table-wrap" style={{marginTop:24}}><table className="admin-table"><thead><tr><th>Administrator</th><th>Email</th><th>Joined</th><th>Access</th></tr></thead><tbody>{administrators.slice((page-1)*10,page*10).map(person=><tr key={person.id}><td><strong>{person.full_name||"Administrator"}</strong></td><td>{person.email||"—"}</td><td>{new Date(person.created_at).toLocaleDateString()}</td><td><button className="banner-edit-action" onClick={()=>setAdministrator(person.id,false)}>Remove admin</button></td></tr>)}</tbody></table><Pagination page={page} total={administrators.length} pageSize={10} change={setPage}/></div>}
+          {tab==="Administrators"&&<div className="admin-table-wrap" style={{marginTop:24}}><table className="admin-table"><thead><tr><th>Administrator</th><th>Email</th><th>Joined</th><th>Access</th></tr></thead><tbody>{administrators.slice((page-1)*10,page*10).map(person=><tr key={person.id}><td><strong>{person.full_name||"Administrator"}</strong>{person.role==="owner"&&<span className="role-pill" style={{marginLeft:8}}>SUPER ADMIN</span>}</td><td>{person.email||"—"}</td><td>{new Date(person.created_at).toLocaleDateString()}</td><td>{person.role==="owner"?<span style={{fontSize:12,fontWeight:800,color:"var(--primary)"}}>Protected owner</span>:adminRole==="owner"?<button className="banner-edit-action" onClick={()=>setAdministrator(person.id,false)}>Remove admin</button>:<span style={{fontSize:12,color:"var(--muted)"}}>Owner approval required</span>}</td></tr>)}</tbody></table><Pagination page={page} total={administrators.length} pageSize={10} change={setPage}/></div>}
 
           {tab==="Audit Logs"&&<div className="admin-table-wrap" style={{marginTop:24}}><table className="admin-table"><thead><tr><th>Action</th><th>Entity</th><th>Actor</th><th>Date</th></tr></thead><tbody>{auditLogs.slice((page-1)*15,page*15).map(log=><tr key={log.id}><td><strong>{log.action}</strong></td><td>{log.entity_type}{log.entity_id?` · ${log.entity_id}`:""}</td><td>{log.actor_id}</td><td>{new Date(log.created_at).toLocaleString()}</td></tr>)}</tbody></table><Pagination page={page} total={auditLogs.length} pageSize={15} change={setPage}/></div>}
 
