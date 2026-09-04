@@ -6,9 +6,6 @@ import { supabase } from "./supabase";
 export function useSessionTimeout(minutes:number,onTimeout?:()=>void){
   const timeoutHandler=useRef(onTimeout);
   useEffect(()=>{
-    timeoutHandler.current=onTimeout;
-  },[onTimeout]);
-  useEffect(()=>{
     const timeoutMs=minutes*60*1000;
     let lastActivity=Date.now();
     let lastRecorded=0;
