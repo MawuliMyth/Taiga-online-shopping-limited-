@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const outfit = Outfit({ variable: "--font-heading", subsets: ["latin"] });
+const inter = Inter({
+  variable: "--font-ui",
+  subsets: ["latin"],
+  display: "swap",
+});
 
 const siteUrl = "https://taigaonlineshoppinglimited.com";
 
@@ -50,7 +54,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={outfit.variable}>
+    <html lang="en" className={inter.variable}>
       <head>
         <script
           dangerouslySetInnerHTML={{

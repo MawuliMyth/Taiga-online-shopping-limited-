@@ -4800,7 +4800,7 @@ img,video,canvas{max-width:100%}button,input,select,textarea{max-width:100%}.sto
 @media(max-width:900px){.catalogue-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.catalogue-layout{grid-template-columns:1fr}.catalogue-layout>aside{position:static}.catalogue-header>.wrap{gap:10px}.catalogue-header .logo small,.catalogue-cart{display:none}}
 @media(max-width:560px){.catalogue-header>.wrap{height:auto;padding:10px 0;flex-wrap:wrap}.catalogue-header .logo{width:100%}.catalogue-header form button{padding:0 14px}.catalogue-title h1{font-size:28px}.catalogue-product-grid{gap:9px}.catalogue-product-grid>article{padding:8px}.catalogue-product-image{height:150px}.catalogue-toolbar{align-items:flex-start;gap:8px}.catalogue-toolbar label{align-items:flex-start;flex-direction:column}.help-page article{padding:20px}}
 
-/* Brand typography and mobile-first hardening */
+/* Unified storefront and admin typography with mobile-first hardening */
 html,
 body,
 button,
@@ -4808,11 +4808,11 @@ input,
 select,
 textarea,
 .dashboard-shell {
-  font-family: var(--font-heading), "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-family: var(--font-ui), Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .dash-search kbd {
-  font-family: var(--font-heading), "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-family: var(--font-ui), Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 html,
