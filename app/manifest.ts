@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Online shopping for electronics, fashion, beauty, home and grocery essentials in Nigeria.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f7f4ed",
-    theme_color: "#0b2c22",
-    icons: [{ src: "/favicon.svg", sizes: "any", type: "image/svg+xml" }],
+    background_color: "#ffffff",
+    theme_color: "#0d7a5f",
+    icons: [{ src: "/taiga-favicon.png?v=2", sizes: "1024x1024", type: "image/png" }],
   };
 }

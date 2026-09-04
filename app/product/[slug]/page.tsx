@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useSessionTimeout } from "../../../lib/use-session-timeout";
+import { nextCartQuantity, visibleProductBadge } from "../../../lib/product-rules";
 import { AuthModal } from "../../components/AuthModal";
 
 const money=(n:number)=>`₦${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -61,7 +62,7 @@ export default function ProductPage(){
       setSelectedOptions({});
       setLoading(false);
       
-      const {data:r}=await supabase.from("products").select("id,slug,name,price,image_url,badge").eq("category_id",data.category_id).eq("is_active",true).neq("id",data.id).limit(5);
+      const {data:r}=await supabase.from("products").select("id,slug,name,price,image_url,badge,sales_count,rating,created_at").eq("category_id",data.category_id).eq("is_active",true).neq("id",data.id).order("sales_count",{ascending:false}).order("rating",{ascending:false}).limit(5);
       setRelated(r??[]);
       
       // Check if product is in wishlist
@@ -138,17 +139,18 @@ export default function ProductPage(){
     }
     const variantKey=selectedVariant?.id||"default";
     const selectedVariantSnapshot=selectedVariant?{id:selectedVariant.id,sku:selectedVariant.sku||null,options:selectedVariant.options,price:selectedVariant.price??product.price,image_url:selectedVariant.image_url||null}:null;
-    const previousCount=cartCount;
-    setCartCount(current=>current+Math.min(qty,available));
-    const {data:row}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id).eq("product_id",product.id).eq("variant_key",variantKey).maybeSingle();
+    const {data:row,error:cartLookupError}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id).eq("product_id",product.id).eq("variant_key",variantKey).maybeSingle();
+    if(cartLookupError){setNotice("Cart could not be checked yet.");setTimeout(()=>setNotice(""),2500);return}
+    const currentQuantity=Number(row?.quantity??0),nextQuantity=nextCartQuantity(currentQuantity,qty,available),addedQuantity=nextQuantity-currentQuantity;
+    if(addedQuantity<1){setNotice("You already have the maximum available quantity in your cart.");setTimeout(()=>setNotice(""),2500);return}
     const result=row
-      ? await supabase.from("cart_items").update({quantity:Math.min(row.quantity+qty,available),selected_variant:selectedVariantSnapshot}).eq("user_id",user.id).eq("product_id",product.id).eq("variant_key",variantKey)
-      : await supabase.from("cart_items").insert({user_id:user.id,product_id:product.id,variant_key:variantKey,selected_variant:selectedVariantSnapshot,quantity:Math.min(qty,available)});
-    if(result.error){setCartCount(previousCount);setNotice(result.error.message);}
+      ? await supabase.from("cart_items").update({quantity:nextQuantity,selected_variant:selectedVariantSnapshot}).eq("user_id",user.id).eq("product_id",product.id).eq("variant_key",variantKey)
+      : await supabase.from("cart_items").insert({user_id:user.id,product_id:product.id,variant_key:variantKey,selected_variant:selectedVariantSnapshot,quantity:nextQuantity});
+    if(result.error){setNotice("Cart could not be updated yet.");}
     else{
       const {data:cartRows}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id);
       setCartCount(cartRows?.reduce((sum,item)=>sum+Number(item.quantity||0),0)??0);
-      setNotice(`${qty} item${qty>1?"s":""} added to cart`);
+      setNotice(`${addedQuantity} item${addedQuantity>1?"s":""} added to cart`);
     }
     setTimeout(()=>setNotice(""),2500);
   }
@@ -177,11 +179,13 @@ export default function ProductPage(){
       return;
     }
     if(saved){
-      await supabase.from("wishlist_items").delete().eq("user_id",user.id).eq("product_id",product.id);
+      const {error}=await supabase.from("wishlist_items").delete().eq("user_id",user.id).eq("product_id",product.id);
+      if(error){setNotice("Saved items could not be updated yet.");setTimeout(()=>setNotice(""),2200);return}
       setSaved(false);
       setNotice("Removed from saved items");
     }else{
-      await supabase.from("wishlist_items").upsert({user_id:user.id,product_id:product.id});
+      const {error}=await supabase.from("wishlist_items").upsert({user_id:user.id,product_id:product.id});
+      if(error){setNotice("Saved items could not be updated yet.");setTimeout(()=>setNotice(""),2200);return}
       setSaved(true);
       setNotice("Saved to your wishlist");
     }
@@ -226,7 +230,7 @@ export default function ProductPage(){
       
       <section className="product-overview">
         <div className="product-gallery">
-          <span>{product.badge}</span>
+          {visibleProductBadge(product.badge,product.created_at)&&<span>{visibleProductBadge(product.badge,product.created_at)}</span>}
           <div className="carousel-stage" role="button" tabIndex={0} aria-label={`Zoom product image ${imageIndex+1} of ${images.length}`} onClick={()=>setZoomOpen(true)} onKeyDown={event=>(event.key==="Enter"||event.key===" ")&&setZoomOpen(true)}>
             <img src={images[imageIndex]} alt={`${product.name} image ${imageIndex+1}`}/>
             <small className="carousel-counter">{imageIndex+1}/{images.length}</small>
@@ -453,7 +457,7 @@ export default function ProductPage(){
         className="animate-slide-in-bottom"
       >
         <div style={{ display: "flex", gap: "12px", alignItems: "center", minWidth: 0 }}>
-          <img src={images[0]} alt="" style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "var(--radius-sm)" }} />
+          <img src={images[0]} alt={product.name} style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "var(--radius-sm)" }} />
           <div style={{ minWidth: 0 }}>
             <strong style={{ fontSize: "13px", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--foreground)" }}>{product.name}</strong>
             <span style={{ fontSize: "12px", color: "var(--primary)", fontWeight: "750" }}>{money(price)}</span>
@@ -461,7 +465,7 @@ export default function ProductPage(){
         </div>
         <button 
           onClick={add} 
-          disabled={product.inventory===0}
+          disabled={availableInventory===0}
           style={{ 
             background: "var(--primary)", 
             color: "#ffffff", 

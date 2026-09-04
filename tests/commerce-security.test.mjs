@@ -12,11 +12,20 @@ const revenueReportingMigration=await readFile(new URL("../supabase/migrations/2
 const initializeRoute=await readFile(new URL("../app/api/paystack/initialize/route.ts",import.meta.url),"utf8");
 const verifyRoute=await readFile(new URL("../app/api/paystack/verify/route.ts",import.meta.url),"utf8");
 const adminPage=await readFile(new URL("../app/admin/page.tsx",import.meta.url),"utf8");
+const serverCommerce=await readFile(new URL("../lib/server-commerce.ts",import.meta.url),"utf8");
 
 test("payment endpoints require an authenticated Supabase user",()=>{
   assert.match(initializeRoute,/authenticatedUser\(request\)/);
   assert.match(verifyRoute,/authenticatedUser\(request\)/);
   assert.match(verifyRoute,/metadata\?\.user_id!==user\.id/);
+});
+
+test("payment APIs use explicit HTTP errors and validate delivery addresses",()=>{
+  assert.match(serverCommerce,/CommerceError/);
+  assert.match(serverCommerce,/validateDeliveryAddress/);
+  assert.match(serverCommerce,/valid Nigerian phone number/i);
+  assert.match(initializeRoute,/apiError\(error\)/);
+  assert.match(verifyRoute,/validateDeliveryAddress\(address\)/);
 });
 
 test("payment references are unique and cannot be reused",()=>{

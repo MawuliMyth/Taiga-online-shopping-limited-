@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useSessionTimeout } from "../../lib/use-session-timeout";
+import { allowedOrderStatuses, canTransitionOrder } from "../../lib/order-rules";
 import { AuthModal } from "../components/AuthModal";
 
 type Tab="Dashboard"|"Orders"|"Products"|"Customers"|"Administrators"|"Categories"|"Analytics"|"Marketing"|"Audit Logs"|"Settings";
@@ -263,11 +264,13 @@ export default function Admin(){
     load();
   }
 
-  async function orderStatus(id:string,status:string){
+  async function orderStatus(id:string,status:string,currentStatus:string){
+    if(!canTransitionOrder(currentStatus,status)){flash(`Orders cannot move from ${currentStatus} to ${status}.`);return false}
     const {error}=await supabase.from("orders").update({status,updated_at:new Date().toISOString()}).eq("id",id);
-    if(error) return flash(error.message);
+    if(error){flash(error.message);return false}
     await supabase.rpc("write_admin_log",{log_action:"order.status_changed",log_entity_type:"order",log_entity_id:id,log_details:{status}});
     load();
+    return true;
   }
 
   async function addCategory(e:React.FormEvent){
@@ -626,9 +629,10 @@ export default function Admin(){
                       <td style={{ padding: "16px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <button 
+                            disabled={Array.isArray(p.variants)&&p.variants.length>0}
                             onClick={() => adjustProductStock(p.id, p.inventory, -5)}
                             style={{ width: "20px", height: "20px", borderRadius: "3px", border: "1px solid var(--border)", background: "var(--secondary)", color: "var(--muted)", fontSize: "10px", display: "grid", placeItems: "center" }}
-                            title="Subtract 5 stock"
+                            title={Array.isArray(p.variants)&&p.variants.length>0?"Edit variant stock from the product editor":"Subtract 5 stock"}
                           >
                             -5
                           </button>
@@ -644,9 +648,10 @@ export default function Admin(){
                             {p.inventory}
                           </span>
                           <button 
+                            disabled={Array.isArray(p.variants)&&p.variants.length>0}
                             onClick={() => adjustProductStock(p.id, p.inventory, 5)}
                             style={{ width: "20px", height: "20px", borderRadius: "3px", border: "1px solid var(--border)", background: "var(--secondary)", color: "var(--muted)", fontSize: "10px", display: "grid", placeItems: "center" }}
-                            title="Add 5 stock"
+                            title={Array.isArray(p.variants)&&p.variants.length>0?"Edit variant stock from the product editor":"Add 5 stock"}
                           >
                             +5
                           </button>
@@ -835,7 +840,7 @@ export default function Admin(){
               </div>
 
               <div className="panel subscribers-panel" style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "24px" }}>
-                <PanelTitle title="Newsletter reach list" sub="People registered to receive news and offer coupon validation codes" />
+                <PanelTitle title="Newsletter reach list" sub="People registered to receive product news and promotional updates" />
                 <div className="subscriber-list" style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "20px" }}>
                   {subscribers.length ? subscribers.map(s=>(
                     <div key={s.id} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border)", padding: "8px 0", fontSize: "12px" }}>
@@ -938,9 +943,9 @@ export default function Admin(){
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <select 
                 value={selectedOrderDetails.status} 
-                onChange={e => {
-                  orderStatus(selectedOrderDetails.id, e.target.value);
-                  setSelectedOrderDetails({ ...selectedOrderDetails, status: e.target.value });
+                onChange={async e => {
+                  const nextStatus=e.target.value;
+                  if(await orderStatus(selectedOrderDetails.id,nextStatus,selectedOrderDetails.status))setSelectedOrderDetails({ ...selectedOrderDetails, status: nextStatus });
                 }}
                 style={{
                   height: "36px",
@@ -952,7 +957,7 @@ export default function Admin(){
                   flex: 1
                 }}
               >
-                {["pending","paid","processing","shipped","delivered","cancelled"].map(s=><option key={s}>{s}</option>)}
+                {allowedOrderStatuses(selectedOrderDetails.status).map(s=><option key={s}>{s}</option>)}
               </select>
             </div>
           </div>
@@ -1040,7 +1045,7 @@ function PanelTitle({title,sub}:{title:string;sub:string}){
 
 function Pagination({page,total,pageSize,change}:{page:number;total:number;pageSize:number;change:(page:number)=>void}){const pages=Math.max(1,Math.ceil(total/pageSize));return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderTop:"1px solid var(--border)",fontSize:12,color:"var(--muted)"}}><span>{total?`${(page-1)*pageSize+1}–${Math.min(page*pageSize,total)} of ${total}`:"No records"}</span><div style={{display:"flex",gap:8}}><button disabled={page<=1} onClick={()=>change(page-1)} style={{padding:"7px 12px",border:"1px solid var(--border)",borderRadius:8}}>Previous</button><button disabled={page>=pages} onClick={()=>change(page+1)} style={{padding:"7px 12px",border:"1px solid var(--border)",borderRadius:8}}>Next</button></div></div>}
 
-function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:string,s:string)=>void;onViewDetails:(order:any)=>void}){
+function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:string,s:string,current:string)=>Promise<boolean>;onViewDetails:(order:any)=>void}){
   const [page,setPage]=useState(1),visible=orders.slice((page-1)*10,page*10);
   return <div className="panel table-panel" style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "24px", marginTop: "24px" }}>
     <PanelTitle title="All customer orders" sub="Track payments, adjust fulfillment pipelines, and access receipts" />
@@ -1069,7 +1074,7 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
               <td style={{ padding: "16px" }}>
                 <select 
                   value={o.status} 
-                  onChange={e=>change(o.id,e.target.value)}
+                  onChange={e=>void change(o.id,e.target.value,o.status)}
                   style={{
                     height: "30px",
                     border: "1px solid var(--border)",
@@ -1081,7 +1086,7 @@ function OrdersTable({orders,change,onViewDetails}:{orders:any[];change:(id:stri
                     cursor: "pointer"
                   }}
                 >
-                  {["pending","paid","processing","shipped","delivered","cancelled"].map(s=><option key={s}>{s}</option>)}
+                  {allowedOrderStatuses(o.status).map(s=><option key={s}>{s}</option>)}
                 </select>
               </td>
               <td style={{ padding: "16px", fontSize: "13px", color: "var(--muted)" }}>{new Date(o.created_at).toLocaleDateString()}</td>

@@ -5,10 +5,12 @@ import { supabase } from "./supabase";
 
 export function useSessionTimeout(minutes:number,onTimeout?:()=>void){
   const timeoutHandler=useRef(onTimeout);
+  useEffect(()=>{timeoutHandler.current=onTimeout},[onTimeout]);
   useEffect(()=>{
-    const timeoutMs=minutes*60*1000;
+    const timeoutMs=Math.max(1,minutes)*60*1000;
     let lastActivity=Date.now();
     let lastRecorded=0;
+    let checking=false;
     const recordActivity=()=>{
       const now=Date.now();
       if(now-lastRecorded<1000)return;
@@ -16,16 +18,20 @@ export function useSessionTimeout(minutes:number,onTimeout?:()=>void){
       lastActivity=now;
     };
     const maintainSession=async()=>{
-      const {data:{session}}=await supabase.auth.getSession();
-      if(!session)return;
-      if(Date.now()-lastActivity>=timeoutMs){
-        await supabase.auth.signOut();
-        timeoutHandler.current?.();
-        return;
-      }
-      if(session.expires_at&&session.expires_at*1000-Date.now()<5*60*1000){
-        await supabase.auth.refreshSession();
-      }
+      if(checking)return;
+      checking=true;
+      try{
+        const {data:{session}}=await supabase.auth.getSession();
+        if(!session)return;
+        if(Date.now()-lastActivity>=timeoutMs){
+          await supabase.auth.signOut();
+          timeoutHandler.current?.();
+          return;
+        }
+        if(session.expires_at&&session.expires_at*1000-Date.now()<5*60*1000){
+          await supabase.auth.refreshSession();
+        }
+      }finally{checking=false}
     };
     const events=["pointerdown","keydown","touchstart","scroll"] as const;
     events.forEach(event=>window.addEventListener(event,recordActivity,{passive:true}));

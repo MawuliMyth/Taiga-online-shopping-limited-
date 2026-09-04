@@ -82,8 +82,9 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
 
   async function quantity(row:CartRow,next:number){
     const variantStock=Array.isArray(row.products?.variants)?row.products?.variants.find((variant:any)=>variant.id===row.variant_key)?.inventory:null;
-    if(next<1) await supabase.from("cart_items").delete().eq("user_id",user.id).eq("product_id",row.product_id).eq("variant_key",row.variant_key||"default");
-    else await supabase.from("cart_items").update({quantity:Math.min(next,Number(variantStock??row.products?.inventory??next))}).eq("user_id",user.id).eq("product_id",row.product_id).eq("variant_key",row.variant_key||"default");
+    const result=next<1?await supabase.from("cart_items").delete().eq("user_id",user.id).eq("product_id",row.product_id).eq("variant_key",row.variant_key||"default"):await supabase.from("cart_items").update({quantity:Math.min(next,99,Number(variantStock??row.products?.inventory??next))}).eq("user_id",user.id).eq("product_id",row.product_id).eq("variant_key",row.variant_key||"default");
+    if(result.error){setError("Cart quantity could not be updated. Please try again.");return}
+    setError("");
     await load();
     onChanged();
   }
@@ -91,15 +92,21 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   async function remove(id:string,variantKey="default"){
     let query=supabase.from(kind==="cart"?"cart_items":"wishlist_items").delete().eq("user_id",user.id).eq("product_id",id);
     if(kind==="cart")query=query.eq("variant_key",variantKey);
-    await query;
+    const {error:removeError}=await query;
+    if(removeError){setError("This item could not be removed. Please try again.");return}
+    setError("");
     await load();
     onChanged();
   }
 
   async function moveToCart(row:any){
     if(Array.isArray(row.products?.variants)&&row.products.variants.length){router.push(`/product/${row.products.slug}`);return}
-    await supabase.from("cart_items").upsert({user_id:user.id,product_id:row.product_id,quantity:1});
-    await supabase.from("wishlist_items").delete().eq("user_id",user.id).eq("product_id",row.product_id);
+    if(Number(row.products?.inventory??0)<1){setError("This product is currently out of stock.");return}
+    const {error:cartError}=await supabase.from("cart_items").upsert({user_id:user.id,product_id:row.product_id,quantity:1});
+    if(cartError){setError("This product could not be added to your cart.");return}
+    const {error:wishlistError}=await supabase.from("wishlist_items").delete().eq("user_id",user.id).eq("product_id",row.product_id);
+    if(wishlistError){setError("The product was added to your cart, but could not be removed from saved items.");await load();onChanged();return}
+    setError("");
     await load();
     onChanged();
   }
@@ -132,14 +139,14 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     return `https://wa.me/${whatsappNumber(supportPhone)}?text=${encodeURIComponent(message)}`;
   }
 
-  return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:kind==="account"?<UserRound/>:kind==="inbox"?<Mail/>:<Package/>}<h2>{kind==="cart"?`Your Cart${cartItemCount>0?` (${cartItemCount})`:""}`:kind==="wishlist"?"Saved items":kind==="account"?"My account":kind==="inbox"?"Inbox":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
+  return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside role="dialog" aria-modal="true" aria-label={kind==="cart"?"Shopping cart":kind} className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:kind==="account"?<UserRound/>:kind==="inbox"?<Mail/>:<Package/>}<h2>{kind==="cart"?`Your Cart${cartItemCount>0?` (${cartItemCount})`:""}`:kind==="wishlist"?"Saved items":kind==="account"?"My account":kind==="inbox"?"Inbox":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
   {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:kind==="account"?<div className="account-panel-content"><div className="account-avatar">{String(rows[0]?.full_name||rows[0]?.email||"T").charAt(0).toUpperCase()}</div><span>Taiga customer</span><h3>{rows[0]?.full_name}</h3><p>{rows[0]?.email}</p><dl><div><dt>Account status</dt><dd>Active</dd></div><div><dt>Member since</dt><dd>{rows[0]?.created_at?new Date(rows[0].created_at).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}):"Recently joined"}</dd></div></dl><p>Your profile is connected to your secure Taiga sign-in.</p></div>:kind==="inbox"?<div className="inbox-list">{rows.length?rows.map(row=><article key={row.id}><span><PackageCheck/></span><div><strong>Order {row.order_number} is {String(row.status).replaceAll("_"," ")}</strong><p>Your order total is {money(Number(row.total))}. Open Orders for full tracking details.</p><small>{new Date(row.created_at).toLocaleString()}</small></div></article>):<div className="panel-empty"><Mail/><h3>Your inbox is clear</h3><p>Updates about your orders will appear here automatically.</p></div>}</div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
     
     {kind==="orders" ? rows.map(row=>{
       const isExpanded = expandedOrder === row.id;
       return (
         <article className="order-row" key={row.id} style={{ display: "flex", flexDirection: "column", gap: "0", alignItems: "stretch", padding: "0", overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px", cursor: "pointer" }} onClick={() => setExpandedOrder(isExpanded ? null : row.id)}>
+          <div role="button" tabIndex={0} aria-expanded={isExpanded} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px", cursor: "pointer" }} onClick={() => setExpandedOrder(isExpanded ? null : row.id)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setExpandedOrder(isExpanded?null:row.id)}}}>
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <strong style={{ fontSize: "14px" }}>{row.order_number}</strong>
@@ -167,7 +174,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
               {row.status === "cancelled" ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--danger-light)", color: "var(--danger)", padding: "10px", borderRadius: "var(--radius-md)", fontSize: "12px", fontWeight: "600" }}>
                   <AlertCircle size={16} />
-                  <span>This order has been cancelled and refunded.</span>
+                  <span>This order has been cancelled. Contact support if you already made a payment.</span>
                 </div>
               ) : (
                 <div style={{ display: "flex", justifyContent: "space-between", position: "relative", paddingBottom: "10px", marginTop: "8px" }}>
@@ -238,8 +245,9 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
           )}
         </article>
       );
-    }) : rows.map(row=>{const variant=Array.isArray(row.products?.variants)?row.products.variants.find((item:any)=>item.id===row.variant_key):null,stock=Number(variant?.inventory??row.products?.inventory??0),price=Number(row.selected_variant?.price??variant?.price??row.products?.price??0),options=row.selected_variant?.options??variant?.options;return <article className="cart-row" key={`${row.product_id}-${row.variant_key||"default"}`}><img src={row.selected_variant?.image_url||variant?.image_url||row.products?.image_url} alt={row.products?.name||"Cart product"}/><div><h3>{row.products?.name}</h3><span className="cart-variant">{options?Object.entries(options).map(([key,value])=>`${key}: ${value}`).join(" · "):"Standard item"}</span><strong>{money(price)}</strong><small className="stock-note">{stock} units available</small>{kind==="cart"?<div className="qty"><button onClick={()=>quantity(row,row.quantity-1)} aria-label="Decrease quantity"><Minus/></button><span>{row.quantity}</span><button onClick={()=>quantity(row,row.quantity+1)} aria-label="Increase quantity"><Plus/></button></div>:<button className="move-cart" onClick={()=>moveToCart(row)}>{Array.isArray(row.products?.variants)&&row.products.variants.length?"Choose options":"Add to cart"}</button>}</div><button className="remove-row" onClick={()=>remove(row.product_id,row.variant_key)} aria-label={`Remove ${row.products?.name||"product"}`}><Trash2/><span>Remove</span></button></article>})}
+    }) : rows.map(row=>{const variant=Array.isArray(row.products?.variants)?row.products.variants.find((item:any)=>item.id===row.variant_key):null,stock=Number(variant?.inventory??row.products?.inventory??0),price=Number(row.selected_variant?.price??variant?.price??row.products?.price??0),options=row.selected_variant?.options??variant?.options;return <article className="cart-row" key={`${row.product_id}-${row.variant_key||"default"}`}><img src={row.selected_variant?.image_url||variant?.image_url||row.products?.image_url} alt={row.products?.name||"Cart product"}/><div><h3>{row.products?.name}</h3><span className="cart-variant">{options?Object.entries(options).map(([key,value])=>`${key}: ${value}`).join(" · "):"Standard item"}</span><strong>{money(price)}</strong><small className="stock-note">{stock>0?`${stock} units available`:"Out of stock"}</small>{kind==="cart"?<div className="qty"><button onClick={()=>quantity(row,row.quantity-1)} aria-label="Decrease quantity"><Minus/></button><span>{row.quantity}</span><button disabled={row.quantity>=stock||stock<1} onClick={()=>quantity(row,row.quantity+1)} aria-label="Increase quantity"><Plus/></button></div>:<button className="move-cart" disabled={stock<1} onClick={()=>moveToCart(row)}>{stock<1?"Out of stock":Array.isArray(row.products?.variants)&&row.products.variants.length?"Choose options":"Add to cart"}</button>}</div><button className="remove-row" onClick={()=>remove(row.product_id,row.variant_key)} aria-label={`Remove ${row.products?.name||"product"}`}><Trash2/><span>Remove</span></button></article>})}
   </div>}
+  {error&&!checkout&&<div className="checkout-error" role="alert">{error}</div>}
   {kind==="cart"&&rows.length>0&&<footer>
     <h4>Order summary</h4>
     <div><span>Subtotal</span><strong>{money(subtotal)}</strong></div>

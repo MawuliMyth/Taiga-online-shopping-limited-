@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { useSessionTimeout } from "../lib/use-session-timeout";
+import { availableProductStock, isNewProduct, nextCartQuantity, visibleProductBadge } from "../lib/product-rules";
 import { AuthModal } from "./components/AuthModal";
 import { StorePanels } from "./components/StorePanels";
 import {
@@ -51,21 +52,12 @@ function whatsappUrl(phone:string){
   return `https://wa.me/${international}?text=${message}`;
 }
 
-type Product = { id: string; slug: string; name: string; category: string; price: number; old: number; rating: number; badge: string; image: string; variants?:any[]; createdAt:string; salesCount:number };
+type Product = { id: string; slug: string; name: string; category: string; price: number; old: number; rating: number; badge: string; image: string; inventory:number; variants?:any[]; createdAt:string; salesCount:number };
 
 function ProductCard({ product, onAdd, onLike, isLiked }: { product: Product; onAdd: () => void; onLike: () => void; isLiked: boolean }) {
   const [liked, setLiked] = useState(isLiked);
   useEffect(() => setLiked(isLiked), [isLiked]);
   
-  // Stable pseudo-random review count based on product name
-  const reviewCount = useMemo(() => {
-    let hash = 0;
-    for (let i = 0; i < product.name.length; i++) {
-      hash = product.name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return Math.abs(hash % 85) + 12; // Between 12 and 96
-  }, [product.name]);
-
   return <article className="product-card">
     <div className="product-media">
       {product.badge && <span className="product-badge">{product.badge}</span>}
@@ -75,13 +67,13 @@ function ProductCard({ product, onAdd, onLike, isLiked }: { product: Product; on
     <div className="product-copy">
       <span className="product-category">{product.category}</span>
       <h3><Link href={`/product/${product.slug}`}>{product.name}</Link></h3>
-      <div className="rating"><Star size={14} fill="currentColor" /> {product.rating} <span>({reviewCount})</span></div>
+      <div className="rating"><Star size={14} fill={product.rating>0?"currentColor":"none"} /> {product.rating>0?product.rating.toFixed(1):"Not rated"}</div>
       <div className="product-bottom">
         <div>
           <strong>₦{product.price.toLocaleString()}</strong>
           {product.old > product.price && <del style={{ marginLeft: "8px", fontSize: "11px", color: "var(--muted-light)" }}>₦{product.old.toLocaleString()}</del>}
         </div>
-        <button onClick={(e) => { e.preventDefault(); onAdd(); }} aria-label={`Add ${product.name} to cart`}><ShoppingCart size={17} /></button>
+        <button disabled={availableProductStock(product)<1} onClick={(e) => { e.preventDefault(); onAdd(); }} aria-label={availableProductStock(product)<1?`${product.name} is out of stock`:`Add ${product.name} to cart`}><ShoppingCart size={17} /></button>
       </div>
     </div>
   </article>;
@@ -105,7 +97,7 @@ export default function Home() {
   const [searchOpen,setSearchOpen]=useState(false);
   const [departmentsOpen,setDepartmentsOpen]=useState(false);
   const [hoveredDepartment,setHoveredDepartment]=useState("Electronics");
-  const [timeLeft,setTimeLeft]=useState(22*60+17);
+  const [timeLeft,setTimeLeft]=useState(0);
   const [storeSettings,setStoreSettings]=useState<any>({announcement_left:"Nationwide delivery available",announcement_center:"",announcement_right:"Call / WhatsApp: 0800 466 3639",flash_sale_title:"Flash Sales",support_phone:"0800 466 3639",support_email:officialSupportEmail});
   const [banners]=useState<any[]>(storefrontBanners);
   const [bannersLoaded]=useState(true);
@@ -125,7 +117,7 @@ export default function Home() {
   const [trackingError, setTrackingError] = useState("");
 
   const filtered = useMemo(() => liveProducts.filter(p => (active === "All" || p.category === active) && p.name.toLowerCase().includes(query.toLowerCase())), [active, query, liveProducts]);
-  const newArrivals=useMemo(()=>[...liveProducts].sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()).slice(0,8),[liveProducts]);
+  const newArrivals=useMemo(()=>liveProducts.filter(product=>isNewProduct(product.createdAt)).sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()).slice(0,8),[liveProducts]);
   const mostWanted=useMemo(()=>[...liveProducts].sort((a,b)=>b.salesCount-a.salesCount||b.rating-a.rating).slice(0,8),[liveProducts]);
 
   useEffect(() => {
@@ -140,9 +132,9 @@ export default function Home() {
 
     supabase.auth.getSession().then(({data}) => {setUser(data.session?.user??null);setAuthReady(true)});
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {setUser(session?.user ?? null);setAuthReady(true);if(session?.user)setShowAuth(false)});
-    supabase.from("products").select("id,slug,name,price,compare_at_price,rating,badge,image_url,variants,created_at,sales_count,categories(name)").eq("is_active", true).order("created_at",{ascending:false}).then(({data,error}) => {
+    supabase.from("products").select("id,slug,name,price,compare_at_price,rating,badge,image_url,inventory,variants,created_at,sales_count,categories(name)").eq("is_active", true).order("created_at",{ascending:false}).then(({data,error}) => {
       if(error)setCatalogError("The catalogue could not be loaded. Please try again shortly.");
-      else setLiveProducts((data??[]).map((p: any) => ({id:p.id,slug:p.slug,name:p.name,category:categoryAliases[p.categories?.name]??p.categories?.name??"Others",price:Number(p.price),old:Number(p.compare_at_price ?? p.price),rating:Number(p.rating),badge:p.badge ?? "New",image:p.image_url,variants:p.variants??[],createdAt:p.created_at,salesCount:Number(p.sales_count??0)})));
+      else setLiveProducts((data??[]).map((p: any) => ({id:p.id,slug:p.slug,name:p.name,category:categoryAliases[p.categories?.name]??p.categories?.name??"Others",price:Number(p.price),old:Number(p.compare_at_price ?? p.price),rating:Number(p.rating),badge:visibleProductBadge(p.badge,p.created_at),image:p.image_url,inventory:Number(p.inventory??0),variants:p.variants??[],createdAt:p.created_at,salesCount:Number(p.sales_count??0)})));
       setCatalogLoading(false);
     });
     const loadStoreSettings=()=>supabase.from("store_settings").select("*").eq("id",1).maybeSingle().then(({data})=>{if(data){setStoreSettings({...data,support_email:data.support_email&&data.support_email!=="support@taiga.ng"?data.support_email:officialSupportEmail});if(data.flash_sale_ends_at)setTimeLeft(Math.max(0,Math.floor((new Date(data.flash_sale_ends_at).getTime()-Date.now())/1000)))}});
@@ -153,7 +145,7 @@ export default function Home() {
   }, []);
 
   useEffect(()=>{if(!authReady)return;const url=new URL(window.location.href),requested=url.searchParams.get("panel");if(requested!=="cart")return;url.searchParams.delete("panel");window.history.replaceState({},"",`${url.pathname}${url.search}${url.hash}`);if(user){setShowAuth(false);setPanel("cart")}else requireAuth("Please sign in first to view and manage your cart.")},[user,authReady]);
-  useEffect(()=>{const timer=window.setInterval(()=>setTimeLeft(v=>v>0?v-1:86400),1000);return()=>window.clearInterval(timer)},[]);
+  useEffect(()=>{const timer=window.setInterval(()=>setTimeLeft(v=>Math.max(0,v-1)),1000);return()=>window.clearInterval(timer)},[]);
 
   useEffect(() => {
     if (!user) { setCart(0); setWishlist(new Set()); return; }
@@ -180,21 +172,28 @@ export default function Home() {
   async function addToCart(product: Product){
     if(!user){requireAuth("Please sign in first to add products to your cart.");return}
     if(Array.isArray(product.variants)&&product.variants.length){window.location.href=`/product/${product.slug}`;return}
-    setCart(current=>current+1);
+    const available=availableProductStock(product);
+    if(available<1)return flash("This product is currently out of stock.");
     const existing = await supabase.from("cart_items").select("quantity").eq("user_id",user.id).eq("product_id",product.id).maybeSingle();
-    const result = existing.data ? await supabase.from("cart_items").update({quantity:existing.data.quantity+1,updated_at:new Date().toISOString()}).eq("user_id",user.id).eq("product_id",product.id) : await supabase.from("cart_items").insert({user_id:user.id,product_id:product.id,quantity:1});
-    if(result.error){setCart(current=>Math.max(0,current-1));return flash("Cart could not be updated yet.")} flash("Added to your cart");
+    if(existing.error)return flash("Cart could not be checked yet.");
+    const current=Number(existing.data?.quantity??0),next=nextCartQuantity(current,1,available);
+    if(next<=current)return flash("You already have the maximum available quantity in your cart.");
+    const result = existing.data ? await supabase.from("cart_items").update({quantity:next,updated_at:new Date().toISOString()}).eq("user_id",user.id).eq("product_id",product.id) : await supabase.from("cart_items").insert({user_id:user.id,product_id:product.id,quantity:next});
+    if(result.error)return flash("Cart could not be updated yet.");
+    setCart(count=>count+(next-current));flash("Added to your cart");
   }
 
   async function toggleWishlist(product: Product){
     if(!user){requireAuth("Please sign in first to save products to your wishlist.");return}
     const id=String(product.id); const next=new Set(wishlist);
-    if(next.has(id)){next.delete(id);await supabase.from("wishlist_items").delete().eq("user_id",user.id).eq("product_id",product.id)}else{next.add(id);await supabase.from("wishlist_items").insert({user_id:user.id,product_id:product.id})}
+    const result=next.has(id)?await supabase.from("wishlist_items").delete().eq("user_id",user.id).eq("product_id",product.id):await supabase.from("wishlist_items").insert({user_id:user.id,product_id:product.id});
+    if(result.error)return flash("Saved items could not be updated yet.");
+    if(next.has(id))next.delete(id);else next.add(id);
     setWishlist(next);
   }
 
   async function reloadCounts(){if(!user)return;const [{data:cartRows},{data:wishRows}]=await Promise.all([supabase.from("cart_items").select("quantity").eq("user_id",user.id),supabase.from("wishlist_items").select("product_id").eq("user_id",user.id)]);setCart(cartRows?.reduce((sum,row)=>sum+row.quantity,0)??0);setWishlist(new Set(wishRows?.map(row=>row.product_id)??[]))}
-  async function subscribe(e:React.FormEvent<HTMLFormElement>){e.preventDefault();const form=new FormData(e.currentTarget);const email=String(form.get("email")??"");const {error}=await supabase.from("newsletter_subscribers").insert({email});flash(error?.code==="23505"?"You are already subscribed":error?"Subscription is not ready yet":"Welcome — your 15% code is TAIGA15");if(!error)e.currentTarget.reset()}
+  async function subscribe(e:React.FormEvent<HTMLFormElement>){e.preventDefault();const form=new FormData(e.currentTarget);const email=String(form.get("email")??"").trim().toLowerCase();const {error}=await supabase.from("newsletter_subscribers").insert({email});flash(error?.code==="23505"?"You are already subscribed":error?"Subscription is not ready yet":"You are subscribed to Taiga updates");if(!error)e.currentTarget.reset()}
   
   // Track order handler
   async function handleTrackOrder(e: React.FormEvent) {
@@ -288,12 +287,12 @@ export default function Home() {
 
       <section className="section wrap" id="categories"><div className="section-heading"><div><span className="kicker">Find your favorite</span><h2>Shop by category</h2></div><Link href="/shop">View all <ArrowRight size={16}/></Link></div><div className="category-grid">{catalogCategories.map(({name,image,icon:Icon,subcategories})=><article className={`category-item ${active===name?"active":""}`} key={name}><button className="category-main" onClick={()=>window.location.href=`/shop?category=${encodeURIComponent(name)}`}><div><img src={image} alt=""/><span><Icon size={17}/></span></div><strong>{name}</strong><small>{liveProducts.filter(p=>p.category===name).length} products</small><ChevronRight className="category-chevron" size={15}/></button><div className="subcategory-menu"><div><Icon size={18}/><strong>{name}</strong></div>{subcategories.map(sub=><button key={sub} onClick={()=>window.location.href=`/search?q=${encodeURIComponent(sub)}&category=${encodeURIComponent(name)}`}>{sub}<ChevronRight size={12}/></button>)}<button className="view-category" onClick={()=>window.location.href=`/shop?category=${encodeURIComponent(name)}`}>View all {name}</button></div></article>)}</div></section>
 
-      <section className="section wrap" id="deals"><div className="flash-heading"><div><Zap size={20}/><h2>{storeSettings.flash_sale_title||"Flash Sales"}</h2></div><strong>Time left: {String(Math.floor(timeLeft/3600)).padStart(2,"0")}h : {String(Math.floor(timeLeft%3600/60)).padStart(2,"0")}m : {String(timeLeft%60).padStart(2,"0")}s</strong><button onClick={()=>setActive("All")}>See all <ChevronRight size={16}/></button></div><div className="deal-filter"><div className="tabs">{["All", ...catalogCategories.map(c => c.name)].map(t => <button className={active === t ? "active":""} onClick={() => setActive(t)} key={t}>{t}</button>)}</div></div>{catalogLoading?<div className="product-grid catalogue-shimmer" aria-label="Loading products">{[1,2,3,4].map(item=><div key={item}><span/><span/><span/></div>)}</div>:catalogError?<div className="empty-state"><strong>Catalogue unavailable</strong><p>{catalogError}</p><button onClick={()=>window.location.reload()}>Try again</button></div>:filtered.length?<div className="product-grid">{filtered.slice(0,4).map(product => <ProductCard key={product.id} product={product} onAdd={() => addToCart(product)} onLike={()=>toggleWishlist(product)} isLiked={wishlist.has(String(product.id))} />)}</div>:<div className="empty-state"><strong>{query?`No products match “${query}”`:"No products are available yet"}</strong><p>{query?"Try another search or category.":"Please check back soon for new products."}</p></div>}</section>
+      <section className="section wrap" id="deals"><div className="flash-heading"><div><Zap size={20}/><h2>{storeSettings.flash_sale_title||"Current offers"}</h2></div><strong>{timeLeft>0?`Time left: ${String(Math.floor(timeLeft/3600)).padStart(2,"0")}h : ${String(Math.floor(timeLeft%3600/60)).padStart(2,"0")}m : ${String(timeLeft%60).padStart(2,"0")}s`:"Offers updated regularly"}</strong><button onClick={()=>setActive("All")}>See all <ChevronRight size={16}/></button></div><div className="deal-filter"><div className="tabs">{["All", ...catalogCategories.map(c => c.name)].map(t => <button className={active === t ? "active":""} onClick={() => setActive(t)} key={t}>{t}</button>)}</div></div>{catalogLoading?<div className="product-grid catalogue-shimmer" aria-label="Loading products">{[1,2,3,4].map(item=><div key={item}><span/><span/><span/></div>)}</div>:catalogError?<div className="empty-state"><strong>Catalogue unavailable</strong><p>{catalogError}</p><button onClick={()=>window.location.reload()}>Try again</button></div>:filtered.length?<div className="product-grid">{filtered.slice(0,4).map(product => <ProductCard key={product.id} product={product} onAdd={() => addToCart(product)} onLike={()=>toggleWishlist(product)} isLiked={wishlist.has(String(product.id))} />)}</div>:<div className="empty-state"><strong>{query?`No products match “${query}”`:"No products are available yet"}</strong><p>{query?"Try another search or category.":"Please check back soon for new products."}</p></div>}</section>
 
       {newArrivals.length>0&&<section className="section wrap catalogue-section" id="new"><div className="section-heading"><div><span className="kicker">Just added</span><h2>New arrivals</h2><p>The newest products published by Taiga.</p></div><a href="#deals">View full catalogue <ArrowRight size={16}/></a></div><div className="product-grid">{newArrivals.slice(0,4).map(product => <ProductCard key={product.id} product={product} onAdd={() => addToCart(product)} onLike={()=>toggleWishlist(product)} isLiked={wishlist.has(String(product.id))} />)}</div></section>}
       {mostWanted.length>0&&<section className="section wrap catalogue-section" id="popular"><div className="section-heading"><div><span className="kicker">Customer favourites</span><h2>Most wanted</h2><p>Ranked automatically by completed purchases and customer ratings.</p></div><a href="#deals">See everything <ArrowRight size={16}/></a></div><div className="product-grid">{mostWanted.slice(0,4).map(product => <ProductCard key={product.id} product={product} onAdd={() => addToCart(product)} onLike={()=>toggleWishlist(product)} isLiked={wishlist.has(String(product.id))} />)}</div></section>}
 
-      <section className="newsletter"><div className="wrap"><div><span className="kicker">Good news, delivered</span><h2>Save 15% on your first order</h2><p>Join for fresh drops, member-only prices and practical inspiration.</p></div><form className="validated-form" onSubmit={subscribe}><input name="email" type="email" maxLength={254} autoComplete="email" placeholder="Your email address" aria-label="Email address" required/><button>Get my 15% <ArrowRight size={16}/></button></form></div></section>
+      <section className="newsletter"><div className="wrap"><div><span className="kicker">Good news, delivered</span><h2>Stay updated with Taiga</h2><p>Get new arrivals, genuine offers and practical shopping updates.</p></div><form className="validated-form" onSubmit={subscribe}><input name="email" type="email" maxLength={254} autoComplete="email" placeholder="Your email address" aria-label="Email address" required/><button>Subscribe <ArrowRight size={16}/></button></form></div></section>
     </main>
 
     <a className="whatsapp-support" href={whatsappUrl(storeSettings.support_phone)} target="_blank" rel="noreferrer" aria-label="Chat with Taiga on WhatsApp"><span>WhatsApp us</span><b aria-hidden="true"><svg viewBox="0 0 32 32" role="img"><path d="M16 4.2A11.5 11.5 0 0 0 6.1 21.6L4.6 27.4l5.9-1.5A11.5 11.5 0 1 0 16 4.2Z"/><path d="M12.1 10.3c-.3-.7-.6-.7-.9-.7h-.7c-.2 0-.6.1-.9.5-.3.4-1.2 1.2-1.2 2.9s1.2 3.4 1.4 3.6c.2.2 2.4 3.7 5.9 5.1 2.9 1.2 3.5 1 4.1.9.6-.1 2-.8 2.3-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.2-.7-.4l-2.4-1.1c-.3-.1-.6-.2-.8.2-.2.3-.9 1.1-1.1 1.3-.2.2-.4.3-.7.1-1-.4-1.9-1-2.7-1.7-.7-.6-1.2-1.4-1.7-2.2-.2-.3 0-.5.1-.7l.5-.6c.2-.2.2-.3.3-.6.1-.2 0-.4 0-.6l-1-2.8Z"/></svg></b></a>
