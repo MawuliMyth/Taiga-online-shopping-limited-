@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- The small identity-provider mark is a fixed UI asset. */
 
 import { useState } from "react";
 import { LogIn, X, Mail, Lock, User as UserIcon } from "lucide-react";

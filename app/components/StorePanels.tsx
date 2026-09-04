@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+/* eslint-disable @next/next/no-img-element -- Cart and order media uses runtime catalogue URLs. */
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { 
@@ -53,7 +54,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     setAddressError("");return true;
   }
 
-  async function load(){
+  const load=useCallback(async()=>{
     setLoading(true);
     const settingsResult=await supabase.from("store_settings").select("standard_shipping_fee,support_phone").eq("id",1).maybeSingle();
     if(settingsResult.data){setDeliverySettings({standard_shipping_fee:settingsResult.data.standard_shipping_fee});setSupportPhone(settingsResult.data.support_phone||"")}
@@ -75,9 +76,9 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
       setRows(data??[]);
     }
     setLoading(false);
-  }
+  },[kind,user.email,user.id,user.user_metadata?.full_name]);
 
-  useEffect(()=>{load()},[kind]);
+  useEffect(()=>{void load()},[load]);
 
   async function quantity(row:CartRow,next:number){
     const variantStock=Array.isArray(row.products?.variants)?row.products?.variants.find((variant:any)=>variant.id===row.variant_key)?.inventory:null;

@@ -1,12 +1,13 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- Admin previews display local uploads and externally managed catalogue media. */
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { 
   BarChart3, Bell, Boxes, ChevronDown, CircleDollarSign, ImagePlus, 
   LayoutDashboard, LogOut, Package, Plus, Search, Settings, 
-  ShoppingCart, Store, Tags, Trash2, Truck, Users, Wallet, X, PackageCheck,
-  TrendingUp, ArrowUpRight, ArrowDownRight, Edit3, ClipboardCheck,
-  ToggleLeft, ToggleRight, Minus, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck, RotateCcw, Download, KeyRound, Smartphone
+  ShoppingCart, Store, Tags, Trash2, Users, X, PackageCheck,
+  ArrowUpRight, ArrowDownRight, Edit3, ClipboardCheck,
+  ToggleLeft, ToggleRight, Eye, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight, Clock, ShieldCheck, RotateCcw, Download, KeyRound, Smartphone
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useSessionTimeout } from "../../lib/use-session-timeout";

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- Catalogue media is supplied dynamically and optimized at upload time. */
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- Store media is supplied dynamically by the catalogue and optimized at upload time. */
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -11,7 +12,7 @@ import {
   ArrowRight, BadgeCheck, ChevronDown, ChevronLeft, ChevronRight, CircleUserRound,
   Heart, Headphones, Laptop, Menu, PackageCheck, Search, Shirt,
   ShoppingBag, ShoppingCart, Smartphone, Sparkles, Star, Store, Truck,
-  X, Zap, Sun, Moon, Clock, MapPin, ClipboardCheck, UserRound, Mail, LogOut
+  X, Zap, Sun, Moon, Clock, ClipboardCheck, UserRound, Mail, LogOut
 } from "lucide-react";
 
 const defaultCategories = [
@@ -109,10 +110,9 @@ export default function Home() {
   const [banners]=useState<any[]>(storefrontBanners);
   const [bannersLoaded]=useState(true);
   const [heroSlide,setHeroSlide]=useState(0),[heroPaused,setHeroPaused]=useState(false);
-  const [catalogCategories,setCatalogCategories]=useState(defaultCategories);
+  const [catalogCategories]=useState(defaultCategories);
   const [footerPanel,setFooterPanel]=useState<null|"story"|"delivery"|"returns"|"privacy"|"terms">(null);
   useSessionTimeout(60,()=>{setUser(null);setPanel(null);setNotice("Your session timed out after 60 minutes of inactivity. Please sign in again.")});
-  const [navSection,setNavSection]=useState("deals");
 
   // Theme support
   const [theme, setTheme] = useState("light");
@@ -154,7 +154,6 @@ export default function Home() {
 
   useEffect(()=>{if(!authReady)return;const url=new URL(window.location.href),requested=url.searchParams.get("panel");if(requested!=="cart")return;url.searchParams.delete("panel");window.history.replaceState({},"",`${url.pathname}${url.search}${url.hash}`);if(user){setShowAuth(false);setPanel("cart")}else requireAuth("Please sign in first to view and manage your cart.")},[user,authReady]);
   useEffect(()=>{const timer=window.setInterval(()=>setTimeLeft(v=>v>0?v-1:86400),1000);return()=>window.clearInterval(timer)},[]);
-  useEffect(()=>{const observer=new IntersectionObserver(entries=>{const visible=entries.filter(entry=>entry.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio)[0];if(visible)setNavSection(visible.target.id)},{rootMargin:"-140px 0px -55%",threshold:[.1,.35,.6]});["deals","categories","new","popular"].forEach(id=>{const element=document.getElementById(id);if(element)observer.observe(element)});return()=>observer.disconnect()},[catalogLoading,liveProducts.length]);
 
   useEffect(() => {
     if (!user) { setCart(0); setWishlist(new Set()); return; }
@@ -227,7 +226,7 @@ export default function Home() {
       } else {
         setTrackedOrder(data);
       }
-    } catch (err) {
+    } catch {
       setTrackingError("An unexpected error occurred. Please try again.");
     } finally {
       setTrackingLoading(false);
@@ -401,7 +400,7 @@ export default function Home() {
                       { state: "processing", label: "Processing", icon: Clock },
                       { state: "shipped", label: "Shipped", icon: Truck },
                       { state: "delivered", label: "Delivered", icon: PackageCheck }
-                    ].map((step, idx) => {
+                    ].map((step) => {
                       const Icon = step.icon;
                       const orderStatuses = ["pending", "paid", "processing", "shipped", "delivered"];
                       const currentIdx = orderStatuses.indexOf(trackedOrder.status);

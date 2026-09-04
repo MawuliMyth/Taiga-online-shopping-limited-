@@ -1,11 +1,12 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- Product media is supplied dynamically by the catalogue and optimized at upload time. */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
   ArrowLeft, BadgeCheck, CheckCircle2, ChevronLeft, ChevronRight, 
-  Heart, MapPin, MessageCircle, Minus, PackageCheck, Plus, Share2, 
-  ShieldCheck, ShoppingCart, Star, Truck, ShieldAlert, Award, X
+  Heart, MessageCircle, Minus, Plus, Share2,
+  ShieldCheck, ShoppingCart, Star, Truck, Award, X
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useSessionTimeout } from "../../../lib/use-session-timeout";
@@ -369,13 +370,15 @@ export default function ProductPage(){
         </div>
       </section>
 
-      {related.length>0&&<section className="related-section" id="related" style={{ marginTop: "32px" }}>
-        <h2>Customers who viewed this also viewed</h2>
-        <div className="related-products-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px" }}>
-          {related.map(r=><Link href={`/product/${r.slug}`} key={r.id} style={{ display: "flex", flexDirection: "column", gap: "8px" }} className="related-card">
-            <img src={r.image_url} alt="" style={{ width: "100%", height: "140px", objectFit: "contain", padding:"10px", borderRadius: "var(--radius-md)", background: "white" }} />
-            <strong style={{ fontSize: "13px", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</strong>
-            <span style={{ fontSize: "13px", fontWeight: "800", color: "var(--primary)" }}>{money(Number(r.price))}</span>
+      {related.length>0&&<section className="related-section" id="related">
+        <h2>You may also like</h2>
+        <div className="related-products-grid">
+          {related.map(r=><Link href={`/product/${r.slug}`} key={r.id} className="related-card" aria-label={`View ${r.name}`}>
+            <div className="related-card-image">
+              <img src={r.image_url} alt={r.name} loading="lazy" />
+            </div>
+            <strong>{r.name}</strong>
+            <span>{money(Number(r.price))}</span>
           </Link>)}
         </div>
       </section>}
