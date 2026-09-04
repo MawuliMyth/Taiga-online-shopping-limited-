@@ -879,11 +879,6 @@ export default function Admin(){
                 </label>
                 
                 <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 700 }}>
-                  Top banner announcement — Centre segment
-                  <input value={storeSettings.announcement_center||""} onChange={e=>setStoreSettings({...storeSettings,announcement_center:e.target.value})} style={{ height: "40px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "0 12px", fontSize: "13px", background: "var(--card-bg)" }} />
-                </label>
-                
-                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 700 }}>
                   Top banner announcement — Right segment
                   <input value={storeSettings.announcement_right||""} onChange={e=>setStoreSettings({...storeSettings,announcement_right:e.target.value})} style={{ height: "40px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "0 12px", fontSize: "13px", background: "var(--card-bg)" }} />
                 </label>

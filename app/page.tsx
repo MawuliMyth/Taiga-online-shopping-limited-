@@ -105,7 +105,7 @@ export default function Home() {
   const [departmentsOpen,setDepartmentsOpen]=useState(false);
   const [hoveredDepartment,setHoveredDepartment]=useState("Electronics");
   const [timeLeft,setTimeLeft]=useState(22*60+17);
-  const [storeSettings,setStoreSettings]=useState<any>({announcement_left:"Nationwide delivery available",announcement_center:"Football celebration: save up to 50%",announcement_right:"Call / WhatsApp: 0800 466 3639",flash_sale_title:"Flash Sales",support_phone:"0800 466 3639",support_email:officialSupportEmail});
+  const [storeSettings,setStoreSettings]=useState<any>({announcement_left:"Nationwide delivery available",announcement_center:"",announcement_right:"Call / WhatsApp: 0800 466 3639",flash_sale_title:"Flash Sales",support_phone:"0800 466 3639",support_email:officialSupportEmail});
   const [banners]=useState<any[]>(storefrontBanners);
   const [bannersLoaded]=useState(true);
   const [heroSlide,setHeroSlide]=useState(0),[heroPaused,setHeroPaused]=useState(false);
@@ -239,7 +239,7 @@ export default function Home() {
   useEffect(()=>{if(heroImages.length<2||heroPaused)return;const timer=window.setInterval(()=>setHeroSlide(index=>(index+1)%heroImages.length),5000);return()=>window.clearInterval(timer)},[heroImages.length,heroPaused]);
 
   return <div className="storefront">{showAuth&&<AuthModal reason={authReason} onClose={()=>setShowAuth(false)}/>} {panel&&user&&<StorePanels kind={panel} user={user} onClose={()=>setPanel(null)} onChanged={reloadCounts}/>} {notice&&<div className="toast">{notice}</div>}
-    <div className="announcement"><span>{/free delivery/i.test(String(storeSettings.announcement_left||""))?"Nationwide delivery available":storeSettings.announcement_left||"Nationwide delivery available"}</span><span>{storeSettings.announcement_center}</span><span>Call / WhatsApp: {storeSettings.support_phone||"0800 466 3639"}</span></div>
+    <div className="announcement"><span>{/free delivery/i.test(String(storeSettings.announcement_left||""))?"Nationwide delivery available":storeSettings.announcement_left||"Nationwide delivery available"}</span><span>Call / WhatsApp: {storeSettings.support_phone||"0800 466 3639"}</span></div>
     <header className="site-header">
       <div className="header-main wrap">
         <Link href="/" className="logo"><img className="brand-logo-image" src="/taiga-logo.png" alt="Taiga Online Shopping Limited" /></Link>
