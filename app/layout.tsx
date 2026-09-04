@@ -76,7 +76,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               "@type": "OnlineStore",
               name: "Taiga Online Shopping Limited",
               url: siteUrl,
-              logo: `${siteUrl}/favicon.svg`,
+              logo: `${siteUrl}/taiga-logo.png`,
               description: "Nigerian online marketplace for electronics, fashion, beauty, home and grocery essentials.",
               email: "support@taigaonlineshoppinglimited.com",
               areaServed: { "@type": "Country", name: "Nigeria" },
