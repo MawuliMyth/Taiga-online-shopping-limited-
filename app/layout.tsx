@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Outfit } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 
 const outfit = Outfit({ variable: "--font-heading", subsets: ["latin"] });
-const plusJakarta = Plus_Jakarta_Sans({ variable: "--font-body", subsets: ["latin"] });
 
 const siteUrl = "https://taigaonlineshoppinglimited.com";
 
@@ -15,6 +14,10 @@ export const metadata: Metadata = {
   },
   description: "Discover thoughtfully selected electronics, fashion, beauty, home and grocery essentials at prices worth smiling about.",
   applicationName: "Taiga Online Shopping Limited",
+  icons: {
+    icon: [{ url: "/taiga-favicon.png?v=2", type: "image/png", sizes: "1024x1024" }],
+    apple: [{ url: "/taiga-favicon.png?v=2", type: "image/png", sizes: "1024x1024" }],
+  },
   keywords: [
     "Taiga Online Shopping Limited",
     "online shopping Nigeria",
@@ -47,7 +50,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${outfit.variable} ${plusJakarta.variable}`}>
+    <html lang="en" className={outfit.variable}>
       <head>
         <script
           dangerouslySetInnerHTML={{
