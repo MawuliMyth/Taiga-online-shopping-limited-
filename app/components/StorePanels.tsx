@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Cart and order media uses runtime catalogue URLs. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { 
@@ -34,7 +34,9 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   const [supportPhone,setSupportPhone]=useState("");
   const [address,setAddress]=useState({first_name:"",last_name:"",phone:"",additional_phone:"",line1:"",additional_info:"",state:"",city:""});
   const [delivery,setDelivery]=useState<""|"standard">("");
-  const [deliverySettings,setDeliverySettings]=useState({standard_shipping_fee:2500});
+  const [deliveryQuote,setDeliveryQuote]=useState<{amount:number;reference:string;expiresAt:number;weight:number;minDays:number;maxDays:number}|null>(null);
+  const [quoting,setQuoting]=useState(false);
+  const quoteRequest=useRef(0);
   const [selectedBank,setSelectedBank]=useState<(typeof BANK_ACCOUNTS)[number]["id"]>("access");
   const [copiedAccount,setCopiedAccount]=useState("");
   
@@ -57,7 +59,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   const load=useCallback(async()=>{
     setLoading(true);
     const settingsResult=await supabase.from("store_settings").select("standard_shipping_fee,support_phone").eq("id",1).maybeSingle();
-    if(settingsResult.data){setDeliverySettings({standard_shipping_fee:settingsResult.data.standard_shipping_fee});setSupportPhone(settingsResult.data.support_phone||"")}
+    if(settingsResult.data){setSupportPhone(settingsResult.data.support_phone||"")}
     if(kind==="account"){
       const {data}=await supabase.from("profiles").select("full_name,email,created_at").eq("id",user.id).maybeSingle();
       setRows([{...(data??{}),email:data?.email||user.email,full_name:data?.full_name||user.user_metadata?.full_name||"Taiga customer"}]);
@@ -79,6 +81,31 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   },[kind,user.email,user.id,user.user_metadata?.full_name]);
 
   useEffect(()=>{void load()},[load]);
+
+  useEffect(()=>{
+    quoteRequest.current++;setDeliveryQuote(null);setDelivery("");setQuoting(false);setStep(current=>current===3?2:current);
+  },[address,rows]);
+
+  useEffect(()=>{
+    if(!deliveryQuote)return;
+    const timer=window.setTimeout(()=>{setDeliveryQuote(null);setDelivery("");setStep(current=>current===3?2:current);setError("Your delivery quote expired. Please request a fresh quote before paying.")},Math.max(0,deliveryQuote.expiresAt-Date.now()));
+    return ()=>window.clearTimeout(timer);
+  },[deliveryQuote]);
+
+  async function requestDeliveryQuote(){
+    const id=++quoteRequest.current;
+    setQuoting(true);setError("");setDeliveryQuote(null);setDelivery("");
+    try{
+      const {data}=await supabase.auth.getSession();
+      if(!data.session)throw new Error("Please sign in again to calculate delivery.");
+      const response=await fetch("/api/shipping/quote",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${data.session.access_token}`},body:JSON.stringify({address}),signal:AbortSignal.timeout(40000)});
+      const result=await response.json();
+      if(!response.ok||!result.ok)throw new Error(result.message||"Contact Taiga for a delivery quote before paying.");
+      if(!Number.isFinite(result.amount)||result.amount<0||!Number.isFinite(result.expiresAt)||result.expiresAt<=Date.now())throw new Error("Please request a fresh delivery quote.");
+      if(id===quoteRequest.current)setDeliveryQuote(result);
+    }catch(error){if(id===quoteRequest.current)setError(error instanceof Error?error.message:"Delivery quotes are unavailable. Please contact Taiga.")}
+    finally{if(id===quoteRequest.current)setQuoting(false)}
+  }
 
   async function quantity(row:CartRow,next:number){
     const variantStock=Array.isArray(row.products?.variants)?row.products?.variants.find((variant:any)=>variant.id===row.variant_key)?.inventory:null;
@@ -112,7 +139,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   }
 
   const subtotal=rows.reduce((sum,row)=>sum+Number(row.selected_variant?.price??(Array.isArray(row.products?.variants)?row.products.variants.find((variant:any)=>variant.id===row.variant_key)?.price:null)??row.products?.price??0)*(row.quantity??1),0),
-        shipping=delivery?Math.max(2500,Number(deliverySettings.standard_shipping_fee)):null,
+        shipping=deliveryQuote?.amount??null,
         total=subtotal+(shipping??0);
 
   async function copyAccountNumber(accountNumber:string){
@@ -129,6 +156,8 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
       "",
       itemLines,
       `Total transferred: ${money(total)}`,
+      `Taiga delivery: ${shipping===null?"Quote required":money(shipping)} (delivered by Taiga)`,
+      `Delivery quote reference: ${deliveryQuote?.reference||"Not available"}`,
       `Bank paid into: ${account.bank} · ${account.accountNumber}`,
       `Customer: ${address.first_name} ${address.last_name}`,
       `Phone: ${address.phone}`,
@@ -256,7 +285,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   </footer>}
   {checkout&&<div className="checkout-screen"><div className="checkout-main"><button className="back-checkout" onClick={()=>setCheckout(false)}>← Back to cart</button><div className="checkout-steps">{["Customer address","Delivery details","Payment method"].map((label,index)=><button className={step===index+1?"active":step>index+1?"complete":""} onClick={()=>step>index+1&&setStep(index+1)} key={label}><span>{step>index+1?<Check/>:index+1}</span>{label}</button>)}</div>
   {step===1&&<form className="address-form validated-form" noValidate onSubmit={event=>{event.preventDefault();if(!validateAddress())return;setAddress(current=>Object.fromEntries(Object.entries(current).map(([key,value])=>[key,value.trim()])) as typeof current);setStep(2)}}><div className="checkout-title"><span>Step 1 of 3</span><h3>Where should we deliver?</h3><p>Enter the recipient’s Nigerian delivery address.</p></div><div className="form-grid">{Object.entries(address).map(([key,value])=>key==="state"?<label key={key}>State<select value={value} onChange={event=>{setAddressError("");setAddress({...address,state:event.target.value,city:""})}} required><option value="">Select a state</option>{nigeriaStates.map(state=><option key={state} value={state}>{state}</option>)}</select></label>:key==="city"?<label key={key}>City<select value={value} onChange={event=>{setAddressError("");setAddress({...address,city:event.target.value})}} disabled={!address.state} required><option value="">{address.state?"Select a city":"Select a state first"}</option>{(nigeriaCities[address.state]??[]).map(city=><option key={city} value={city}>{city}</option>)}</select></label>:<label key={key}>{key==="line1"?"Street address":key.replaceAll("_"," ")}<input {...addressInputRules(key)} value={value} onChange={event=>{setAddressError("");setAddress({...address,[key]:event.target.value})}} required={!['additional_phone','additional_info'].includes(key)} placeholder={key==="phone"?"e.g. 08030000000":""}/></label>)}</div>{addressError&&<div className="form-error" role="alert"><AlertCircle/>{addressError}</div>}<div className="step-actions"><button type="button" onClick={()=>setCheckout(false)}>Cancel</button><button>Save & continue</button></div></form>}
-  {step===2&&<div className="choice-step delivery-choice"><div className="checkout-title"><span>Step 2 of 3</span><h3>Delivery details</h3><p>Taiga currently provides doorstep delivery only.</p></div><div className="selected delivery-only-card"><Truck/><div><strong>Standard delivery</strong><span>Doorstep delivery in 2–5 business days</span><small>Nationwide delivery to your saved address. Fee starts from ₦2,500.</small></div><b>{money(Math.max(2500,Number(deliverySettings.standard_shipping_fee)))}</b></div><div className="step-actions"><button onClick={()=>setStep(1)}>Back</button><button onClick={()=>{setDelivery("standard");setStep(3)}}>Continue</button></div></div>}
+  {step===2&&<div className="choice-step delivery-choice"><div className="checkout-title"><span>Step 2 of 3</span><h3>Taiga delivery</h3><p>Your order is delivered by Taiga, not a third-party courier. Delivery timing is confirmed by our team.</p></div><div className="selected delivery-only-card"><Truck/><div><strong>From Ikeja, Lagos</strong><span>Price based on your destination and packed weight</span><small>{deliveryQuote?`${deliveryQuote.weight} kg · ${deliveryQuote.minDays}–${deliveryQuote.maxDays} business days`:"Rates are set by Taiga. Unlisted destinations require a manual quote."}</small></div><b aria-live="polite">{deliveryQuote?money(deliveryQuote.amount):"Quote required"}</b></div><p>Delivery is calculated by Taiga. No third-party courier service is used.</p><button disabled={quoting} onClick={()=>void requestDeliveryQuote()}>{quoting?"Calculating delivery…":deliveryQuote?"Refresh delivery quote":"Calculate delivery"}</button>{error&&<p role="alert" className="checkout-error">{error}</p>}{supportPhone&&<p><a href={`https://wa.me/${whatsappNumber(supportPhone)}?text=${encodeURIComponent(`Hello Taiga, please confirm a delivery quote to ${address.city}, ${address.state}.`)}`} target="_blank" rel="noreferrer">Contact Taiga for a delivery quote</a></p>}<div className="step-actions"><button onClick={()=>setStep(1)}>Back</button><button disabled={quoting||!deliveryQuote} onClick={()=>{if(!deliveryQuote||deliveryQuote.expiresAt<=Date.now()){setDeliveryQuote(null);setError("Please request a fresh delivery quote.");return}setDelivery("standard");setStep(3)}}>Continue</button></div></div>}
   {step===3&&<div className="choice-step bank-transfer-step"><div className="checkout-title"><span>Step 3 of 3</span><h3>Pay by bank transfer</h3><p>Transfer exactly <strong>{money(total)}</strong> to any Taiga account below, then send your receipt on WhatsApp for verification.</p></div><div className="bank-account-grid">{BANK_ACCOUNTS.map(account=><article className={`bank-account-card ${selectedBank===account.id?"selected":""}`} key={account.id}><button type="button" className="bank-account-select" onClick={()=>setSelectedBank(account.id)} aria-pressed={selectedBank===account.id}><span className="bank-logo"><img src={account.logo} alt={`${account.bank} logo`} loading="eager" decoding="async"/></span><span className="bank-account-copy"><small>{account.bank}</small><strong>{account.accountNumber}</strong><span>{account.accountName}</span></span><span className="bank-selected-mark">{selectedBank===account.id?<Check/>:null}</span></button><button type="button" className="copy-account" onClick={()=>copyAccountNumber(account.accountNumber)}><Copy/>{copiedAccount===account.accountNumber?"Copied":"Copy account"}</button></article>)}</div><div className="secure-note bank-transfer-note"><ShieldCheck/> Payment is verified manually. Your order is confirmed only after Taiga receives your transfer receipt and verifies the funds.</div>{error&&<div className="checkout-error">{error}</div>}<div className="step-actions"><button onClick={()=>setStep(2)}>Back</button><a className="bank-proof-action" href={bankTransferWhatsappUrl()} target="_blank" rel="noreferrer"><MessageCircle/> I&apos;ve transferred — send proof</a></div></div>}</div><aside className="checkout-summary"><h3>Order summary</h3><div><span>Items total ({rows.reduce((sum,row)=>sum+(row.quantity??1),0)})</span><b>{money(subtotal)}</b></div><div><span>Delivery</span><b>{shipping===null?"Select a method":shipping===0?"FREE":money(shipping)}</b></div><div className="summary-total"><span>Total to transfer</span><strong>{money(total)}</strong></div><p>All prices and transfers are in Nigerian naira. Keep your receipt until your order is confirmed.</p></aside></div>}
   </aside></div>
 }

@@ -5294,3 +5294,19 @@ img {
     transition-duration: 0.01ms !important;
   }
 }
+/* Admin delivery configuration shares the store's existing theme. */
+.taiga-delivery-admin { padding:24px; }
+.taiga-delivery-admin h2 { margin:0 0 12px; }
+.taiga-delivery-admin p { font-size:1rem; line-height:1.6; }
+.delivery-admin-layout { display:grid; grid-template-columns:minmax(190px,1fr) minmax(0,3fr); gap:24px; margin-top:24px; }
+.delivery-admin-layout aside { display:flex; flex-direction:column; gap:8px; }
+.delivery-admin-layout button { padding:12px 16px; min-height:44px; border:1px solid var(--border); border-radius:8px; background:var(--card-bg); color:inherit; text-align:left; }
+.delivery-admin-layout button.selected { border-color:var(--primary); }
+.delivery-admin-layout button:disabled { opacity:.5; cursor:not-allowed; }
+.delivery-admin-layout small { display:block; margin-top:6px; }
+.delivery-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.delivery-admin-layout label { display:flex; flex-direction:column; gap:8px; font-size:.875rem; }
+.delivery-admin-layout input:not([type=checkbox]),.delivery-admin-layout select { width:100%; min-width:0; min-height:44px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--card-bg); color:inherit; font:inherit; }
+.delivery-admin-layout .delivery-toggle { flex-direction:row; align-items:center; margin:20px 0; min-height:44px; }
+.delivery-admin-layout fieldset { border:1px solid var(--border); padding:16px; border-radius:8px; margin-top:24px; }
+@media(max-width:700px) { .delivery-admin-layout,.delivery-fields { grid-template-columns:1fr; } .taiga-delivery-admin { padding:16px; } }
