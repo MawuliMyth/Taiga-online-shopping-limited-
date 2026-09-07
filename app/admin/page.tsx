@@ -69,7 +69,7 @@ export default function Admin(){
 
   const [storeSettings,setStoreSettings]=useState<any>({
     store_name:"Taiga Online Shopping Limited",
-    support_email:"support@taigaonlineshoppinglimited.com",
+    support_email:"sales@taigaonlineshoppinglimited.com",
     support_phone:"0800 466 3639",
     free_shipping_threshold:50000,
     standard_shipping_fee:2500,

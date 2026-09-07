@@ -85,10 +85,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               url: siteUrl,
               logo: `${siteUrl}/taiga-logo.png`,
               description: "Nigerian online marketplace for electronics, fashion, beauty, home and grocery essentials.",
-              email: "support@taigaonlineshoppinglimited.com",
+              email: "sales@taigaonlineshoppinglimited.com",
               areaServed: { "@type": "Country", name: "Nigeria" },
               contactPoint: [
-                { "@type": "ContactPoint", contactType: "customer support", email: "support@taigaonlineshoppinglimited.com", availableLanguage: "English" },
+                { "@type": "ContactPoint", contactType: "customer support", email: "sales@taigaonlineshoppinglimited.com", availableLanguage: "English" },
                 { "@type": "ContactPoint", contactType: "sales", email: "sales@taigaonlineshoppinglimited.com", availableLanguage: "English" },
               ],
             }).replace(/</g, "\\u003c"),
