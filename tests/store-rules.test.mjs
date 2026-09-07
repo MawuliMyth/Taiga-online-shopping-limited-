@@ -6,10 +6,23 @@ import {
   isNewProduct,
   nextCartQuantity,
   visibleProductBadge,
+  selectProductOption,
+  visibleSpecifications,
 } from "../lib/product-rules.ts";
 import { allowedOrderStatuses, canTransitionOrder } from "../lib/order-rules.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
+test("variant switching clears conflicts without disabling another available variant", () => {
+  const variants=[{options:{Colour:"Black",Size:"Small"},inventory:2},{options:{Colour:"White",Size:"Large"},inventory:3},{options:{Colour:"Red",Size:"Small"},inventory:0}];
+  const next=selectProductOption(variants,{Colour:"Black",Size:"Small"},"Colour","White");
+  assert.deepEqual(next,{Colour:"White"});
+  assert.deepEqual(selectProductOption(variants,next,"Size","Large"),{Size:"Large",Colour:"White"});
+  assert.deepEqual(selectProductOption(variants,next,"Colour","Red"),next);
+  assert.deepEqual(selectProductOption(variants,{Colour:"White",Size:"Large"},"Colour","White"),{Colour:"White",Size:"Large"});
+});
+test("customer specifications omit empty and not applicable values", () => {
+  assert.deepEqual(visibleSpecifications({Gender:" Not applicable ",Brand:"Samsung",Other:"N/A",Empty:"",Missing:null,Weight:0}),[["Brand","Samsung"],["Weight",0]]);
+});
 const now = Date.parse("2026-09-04T12:00:00Z");
 
 test("new products expire automatically after 30 days", () => {

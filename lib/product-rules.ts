@@ -1,4 +1,17 @@
 export const NEW_PRODUCT_DAYS = 30;
+export function selectProductOption(variants: { options?: Record<string,string>; inventory?: number; active?: boolean }[], current: Record<string,string>, name: string, value: string) {
+  const candidates = variants.filter(v => v.active !== false && Number(v.inventory) > 0 && v.options?.[name] === value);
+  if (!candidates.length) return current;
+  const next: Record<string,string> = { [name]: value };
+  for (const [key, selected] of Object.entries(current)) {
+    if (key !== name && candidates.some(v => v.options?.[key] === selected && Object.entries(next).every(([k,val]) => v.options?.[k] === val))) next[key] = selected;
+  }
+  return next;
+}
+
+export function visibleSpecifications(specifications: Record<string,unknown> = {}) {
+  return Object.entries(specifications).filter(([,value]) => value != null && !["", "not applicable", "n/a", "na"].includes(String(value).trim().toLowerCase()));
+}
 const NEW_PRODUCT_WINDOW_MS = NEW_PRODUCT_DAYS * 24 * 60 * 60 * 1000;
 
 export function isNewProduct(createdAt: string, now = Date.now()) {

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useSessionTimeout } from "../../../lib/use-session-timeout";
-import { nextCartQuantity, visibleProductBadge } from "../../../lib/product-rules";
+import { nextCartQuantity, visibleProductBadge, selectProductOption, visibleSpecifications } from "../../../lib/product-rules";
 import { AuthModal } from "../../components/AuthModal";
 
 const money=(n:number)=>`₦${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -279,8 +279,8 @@ export default function ProductPage(){
           {variants.length>0&&<div className="product-options" aria-label="Product options">{customerOptionNames.map(optionName=>{
             const values=Array.from(new Set(variants.map((variant:any)=>variant.options?.[optionName]).filter(Boolean))) as string[];
             return <fieldset key={optionName}><legend>{optionName} <span>{selectedOptions[optionName]||"Select one"}</span></legend><div>{values.map(value=>{
-              const possible=variants.some((variant:any)=>variant.options?.[optionName]===value&&Object.entries(selectedOptions).every(([key,selected])=>key===optionName||!selected||variant.options?.[key]===selected)&&Number(variant.inventory)>0);
-              return <button type="button" key={value} className={selectedOptions[optionName]===value?"selected":""} disabled={!possible} onClick={()=>{setSelectedOptions(current=>({...current,[optionName]:value}));setQty(1);const match=variants.find((variant:any)=>variant.options?.[optionName]===value&&Object.entries(selectedOptions).every(([key,selected])=>key===optionName||!selected||variant.options?.[key]===selected));if(match?.image_url){const nextIndex=images.indexOf(match.image_url);if(nextIndex>=0)setImageIndex(nextIndex)}}}>{value}</button>})}</div></fieldset>})}</div>}
+              const possible=variants.some((variant:any)=>variant.options?.[optionName]===value&&Number(variant.inventory)>0);
+              return <button type="button" key={value} aria-pressed={selectedOptions[optionName]===value} className={selectedOptions[optionName]===value?"selected":""} disabled={!possible} onClick={()=>{const next=selectProductOption(variants,selectedOptions,optionName,value);setSelectedOptions(next);setQty(1);const match=variants.find((variant:any)=>Number(variant.inventory)>0&&Object.entries(next).every(([key,selected])=>variant.options?.[key]===selected));if(match?.image_url){const nextIndex=images.indexOf(match.image_url);if(nextIndex>=0)setImageIndex(nextIndex)}}}>{value}</button>})}</div></fieldset>})}</div>}
           
           <div className="buy-row" style={{ display: "flex", gap: "16px", marginTop: "28px" }}>
             <div className="detail-qty" style={{ display: "flex", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", overflow: "hidden", background: "var(--secondary)" }}>
@@ -342,7 +342,7 @@ export default function ProductPage(){
             <div className="product-tab-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>
                 <h3 style={{ fontSize: "12px", textTransform: "uppercase", fontWeight: "800", color: "var(--foreground)", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}><Award size={14} /> Product specifications</h3>
-                {Object.keys(product.specifications||{}).length?<dl className="product-spec-list">{Object.entries(product.specifications).map(([name,value])=><div key={name}><dt>{name}</dt><dd>{String(value)}</dd></div>)}</dl>:<p style={{fontSize:12,color:"var(--muted)"}}>No additional specifications have been published for this product.</p>}
+                {visibleSpecifications(product.specifications||{}).length>0&&<dl className="product-spec-list">{visibleSpecifications(product.specifications||{}).map(([name,value])=><div key={name}><dt>{name}</dt><dd>{String(value)}</dd></div>)}</dl>}
               </article>
               
               <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "20px", background: "var(--secondary)" }}>

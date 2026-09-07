@@ -49,6 +49,7 @@ export default function Admin(){
         [customers,setCustomers]=useState<any[]>([]),
         [administrators,setAdministrators]=useState<any[]>([]),
         [auditLogs,setAuditLogs]=useState<any[]>([]),
+        [auditError,setAuditError]=useState(""),
         [categories,setCategories]=useState<any[]>([]),
         [subscribers,setSubscribers]=useState<any[]>([]),
         [loading,setLoading]=useState(true),
@@ -152,6 +153,7 @@ export default function Admin(){
     setCustomers((users.data??[]).filter((profile:any)=>profile.role==="customer"));
     setAdministrators((users.data??[]).filter((profile:any)=>profile.role==="admin"||profile.role==="owner"));
     setAuditLogs(logsResult.data??[]);
+    setAuditError(logsResult.error?"Audit history could not be loaded. Please refresh or sign in again.":"");
     setSubscribers(subs.data??[]);
     if(settingsResult.data) setStoreSettings(settingsResult.data);
     setBanners(bannerResult.data??[]);
@@ -161,13 +163,15 @@ export default function Admin(){
 
   useEffect(()=>{
     check();
-    const {data}=supabase.auth.onAuthStateChange(()=>check());
+    const {data}=supabase.auth.onAuthStateChange(()=>{window.setTimeout(()=>void check(),0)});
     return()=>data.subscription.unsubscribe();
   },[]);
 
   useEffect(()=>{
     if(access==="allowed") load();
   },[access]);
+
+  useEffect(()=>{setPage(1)},[tab]);
 
   function flash(s:string){
     setNotice(s);
@@ -206,10 +210,10 @@ export default function Admin(){
       if(variantSignatures.has(signature))return flash("Each variant combination must be unique.");
       variantSignatures.add(signature);
       if(!Number.isInteger(Number(variant.inventory))||Number(variant.inventory)<0) return flash("Every variant inventory must be a whole number of zero or more.");
-      if(variant.price!==null&&variant.price!==""&&(!Number.isFinite(Number(variant.price))||Number(variant.price)<=0)) return flash("Every variant price must be greater than zero or left blank.");
-      if(variant.discounted_price!==null&&variant.discounted_price!==""&&(!Number.isFinite(Number(variant.discounted_price))||Number(variant.discounted_price)<=0)) return flash("Every discounted variant price must be greater than zero or left blank.");
-      if(variant.discounted_price&&variant.price&&Number(variant.discounted_price)>=Number(variant.price))return flash("A discounted variant price must be lower than its regular price.");
-      variant.inventory=Number(variant.inventory);variant.price=variant.price===""||variant.price===null?null:Number(variant.price);variant.discounted_price=variant.discounted_price===""||variant.discounted_price===null?null:Number(variant.discounted_price);
+      if(variant.price!=null&&variant.price!==""&&(!Number.isFinite(Number(variant.price))||Number(variant.price)<=0)) return flash("Every variant price must be greater than zero or left blank.");
+      if(variant.discounted_price!=null&&variant.discounted_price!==""&&(!Number.isFinite(Number(variant.discounted_price))||Number(variant.discounted_price)<=0)) return flash("Every discounted variant price must be greater than zero or left blank.");
+      if(variant.discounted_price&&Number(variant.discounted_price)>=Number(variant.price||payload.price))return flash("A discounted variant price must be lower than its regular price.");
+      variant.inventory=Number(variant.inventory);variant.price=variant.price===""||variant.price==null?null:Number(variant.price);variant.discounted_price=variant.discounted_price===""||variant.discounted_price==null?null:Number(variant.discounted_price);
     }
     if(payload.variants.length) payload.inventory=payload.variants.reduce((sum:number,variant:any)=>sum+variant.inventory,0);
     payload.warranty_value=Number(payload.warranty_value||0);
@@ -728,7 +732,7 @@ export default function Admin(){
 
           {tab==="Administrators"&&<div className="admin-table-wrap" style={{marginTop:24}}><table className="admin-table"><thead><tr><th>Administrator</th><th>Email</th><th>Joined</th><th>Access</th></tr></thead><tbody>{administrators.slice((page-1)*10,page*10).map(person=><tr key={person.id}><td><strong>{person.full_name||"Administrator"}</strong>{person.role==="owner"&&<span className="role-pill" style={{marginLeft:8}}>SUPER ADMIN</span>}</td><td>{person.email||"—"}</td><td>{new Date(person.created_at).toLocaleDateString()}</td><td>{person.role==="owner"?<span style={{fontSize:12,fontWeight:800,color:"var(--primary)"}}>Protected owner</span>:adminRole==="owner"?<button className="banner-edit-action" onClick={()=>setAdministrator(person.id,false)}>Remove admin</button>:<span style={{fontSize:12,color:"var(--muted)"}}>Owner approval required</span>}</td></tr>)}</tbody></table><Pagination page={page} total={administrators.length} pageSize={10} change={setPage}/></div>}
 
-          {tab==="Audit Logs"&&<div className="admin-table-wrap" style={{marginTop:24}}><table className="admin-table"><thead><tr><th>Action</th><th>Entity</th><th>Actor</th><th>Date</th></tr></thead><tbody>{auditLogs.slice((page-1)*15,page*15).map(log=><tr key={log.id}><td><strong>{log.action}</strong></td><td>{log.entity_type}{log.entity_id?` · ${log.entity_id}`:""}</td><td>{log.actor_id}</td><td>{new Date(log.created_at).toLocaleString()}</td></tr>)}</tbody></table><Pagination page={page} total={auditLogs.length} pageSize={15} change={setPage}/></div>}
+          {tab==="Audit Logs"&&<div className="admin-table-wrap" style={{marginTop:24}}><button type="button" onClick={()=>void load()} disabled={loading}>Refresh audit history</button>{auditError?<p role="alert">{auditError}</p>:auditLogs.length===0?<p>No audit events have been recorded yet.</p>:<><table className="admin-table"><thead><tr><th>Action</th><th>Entity</th><th>Actor</th><th>Date</th></tr></thead><tbody>{auditLogs.slice((page-1)*15,page*15).map(log=><tr key={log.id}><td><strong>{log.action}</strong></td><td>{log.entity_type}{log.entity_id?` · ${log.entity_id}`:""}</td><td>{administrators.find(person=>person.id===log.actor_id)?.full_name||log.actor_id}</td><td>{new Date(log.created_at).toLocaleString()}</td></tr>)}</tbody></table><Pagination page={page} total={auditLogs.length} pageSize={15} change={setPage}/></>}</div>}
 
           {tab==="Categories" && (
             <div className="category-admin" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "24px", marginTop: "24px" }}>

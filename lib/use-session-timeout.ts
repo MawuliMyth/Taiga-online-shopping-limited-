@@ -11,11 +11,14 @@ export function useSessionTimeout(minutes:number,onTimeout?:()=>void){
     let lastActivity=Date.now();
     let lastRecorded=0;
     let checking=false;
+    const channel=typeof BroadcastChannel!=="undefined"?new BroadcastChannel("taiga-session-activity"):null;
+    if(channel)channel.onmessage=event=>{if(event.data==="activity")lastActivity=Date.now()};
     const recordActivity=()=>{
       const now=Date.now();
       if(now-lastRecorded<1000)return;
       lastRecorded=now;
       lastActivity=now;
+      channel?.postMessage("activity");
     };
     const maintainSession=async()=>{
       if(checking)return;
@@ -31,15 +34,17 @@ export function useSessionTimeout(minutes:number,onTimeout?:()=>void){
         if(session.expires_at&&session.expires_at*1000-Date.now()<5*60*1000){
           await supabase.auth.refreshSession();
         }
-      }finally{checking=false}
+      }catch{ /* A temporary network failure is not an inactivity timeout. */ }
+      finally{checking=false}
     };
-    const events=["pointerdown","keydown","touchstart","scroll"] as const;
-    events.forEach(event=>window.addEventListener(event,recordActivity,{passive:true}));
+    const events=["pointerdown","pointermove","keydown","input","touchstart","wheel","scroll"] as const;
+    events.forEach(event=>window.addEventListener(event,recordActivity,{passive:true,capture:true}));
     window.addEventListener("focus",maintainSession);
     const interval=window.setInterval(maintainSession,60*1000);
     maintainSession();
     return()=>{
-      events.forEach(event=>window.removeEventListener(event,recordActivity));
+      events.forEach(event=>window.removeEventListener(event,recordActivity,true));
+      channel?.close();
       window.removeEventListener("focus",maintainSession);
       window.clearInterval(interval);
     };

@@ -248,9 +248,9 @@ export default function Home() {
           <div className="account-menu-shell">
             <button className="account-trigger" aria-haspopup="menu" aria-expanded={accountMenuOpen} onClick={()=>user?setAccountMenuOpen(open=>!open):openProtectedPanel("account","Please sign in first to access your account.")}><CircleUserRound /><span>{!authReady?"Checking account":user?`Hi, ${user.user_metadata?.full_name?.split(" ")[0]||user.email?.split("@")[0]}`:"Hello, sign in"}<small>{user?"My account":"Account"}</small></span>{user&&<ChevronDown className={accountMenuOpen?"rotated":""} size={15}/>}</button>
             {user&&accountMenuOpen&&<div className="account-dropdown" role="menu">
-              <button role="menuitem" onClick={()=>window.location.href="/account/account"}><UserRound/><span>My Account<small>Profile and account details</small></span></button>
+              <button role="menuitem" onClick={()=>openProtectedPanel("account","Please sign in to view your account.")}><UserRound/><span>My Account<small>Profile and account details</small></span></button>
               <button role="menuitem" onClick={()=>openProtectedPanel("orders","Please sign in first to track your orders.")}><ShoppingBag/><span>Orders<small>Track current purchases</small></span></button>
-              <button role="menuitem" onClick={()=>window.location.href="/account/inbox"}><Mail/><span>Inbox<small>Order updates and notices</small></span></button>
+              <button role="menuitem" onClick={()=>openProtectedPanel("inbox","Please sign in to view your inbox.")}><Mail/><span>Inbox<small>Order updates and notices</small></span></button>
               <button role="menuitem" onClick={()=>openProtectedPanel("wishlist","Please sign in first to view your wishlist.")}><Heart/><span>Wishlist<small>{wishlist.size} saved {wishlist.size===1?"item":"items"}</small></span></button>
               <button className="account-signout" role="menuitem" onClick={signOut}><LogOut/><span>Sign out<small>End this session</small></span></button>
             </div>}

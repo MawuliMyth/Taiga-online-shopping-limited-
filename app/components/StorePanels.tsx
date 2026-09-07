@@ -58,13 +58,15 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
 
   const load=useCallback(async()=>{
     setLoading(true);
+    setError("");
     const settingsResult=await supabase.from("store_settings").select("standard_shipping_fee,support_phone").eq("id",1).maybeSingle();
     if(settingsResult.data){setSupportPhone(settingsResult.data.support_phone||"")}
     if(kind==="account"){
       const {data}=await supabase.from("profiles").select("full_name,email,created_at").eq("id",user.id).maybeSingle();
       setRows([{...(data??{}),email:data?.email||user.email,full_name:data?.full_name||user.user_metadata?.full_name||"Taiga customer"}]);
     }else if(kind==="inbox"){
-      const {data}=await supabase.from("orders").select("id,order_number,status,created_at,total").eq("user_id",user.id).order("created_at",{ascending:false});
+      const {data,error:loadError}=await supabase.from("orders").select("id,order_number,status,created_at,total").eq("user_id",user.id).order("created_at",{ascending:false});
+      if(loadError)setError("Unable to load your orders. Please try again.");
       setRows(data??[]);
     }else if(kind==="cart"){
       const {data,error:loadError}=await supabase.from("cart_items").select("product_id,variant_key,selected_variant,quantity,products(name,slug,price,image_url,inventory,variants)").eq("user_id",user.id);
@@ -74,13 +76,17 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
       const {data}=await supabase.from("wishlist_items").select("product_id,products(name,slug,price,image_url,inventory,variants)").eq("user_id",user.id);
       setRows(data??[]);
     }else{
-      const {data}=await supabase.from("orders").select("id,order_number,total,status,created_at,shipping_address,order_items(product_name,quantity,selected_variant)").eq("user_id",user.id).order("created_at",{ascending:false});
+      const {data,error:loadError}=await supabase.from("orders").select("id,order_number,total,status,created_at,shipping_address,order_items(product_name,quantity,selected_variant)").eq("user_id",user.id).order("created_at",{ascending:false});
+      if(loadError)setError("Unable to load your orders. Please try again.");
       setRows(data??[]);
     }
     setLoading(false);
   },[kind,user.email,user.id,user.user_metadata?.full_name]);
 
   useEffect(()=>{void load()},[load]);
+  useEffect(()=>{
+    if(kind==="orders")setExpandedOrder(new URLSearchParams(window.location.search).get("order"));
+  },[kind]);
 
   useEffect(()=>{
     quoteRequest.current++;setDeliveryQuote(null);setDelivery("");setQuoting(false);setStep(current=>current===3?2:current);
@@ -169,25 +175,26 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   }
 
   return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside role="dialog" aria-modal="true" aria-label={kind==="cart"?"Shopping cart":kind} className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:kind==="account"?<UserRound/>:kind==="inbox"?<Mail/>:<Package/>}<h2>{kind==="cart"?`Your Cart${cartItemCount>0?` (${cartItemCount})`:""}`:kind==="wishlist"?"Saved items":kind==="account"?"My account":kind==="inbox"?"Inbox":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
-  {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:kind==="account"?<div className="account-panel-content"><div className="account-avatar">{String(rows[0]?.full_name||rows[0]?.email||"T").charAt(0).toUpperCase()}</div><span>Taiga customer</span><h3>{rows[0]?.full_name}</h3><p>{rows[0]?.email}</p><dl><div><dt>Account status</dt><dd>Active</dd></div><div><dt>Member since</dt><dd>{rows[0]?.created_at?new Date(rows[0].created_at).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}):"Recently joined"}</dd></div></dl><p>Your profile is connected to your secure Taiga sign-in.</p></div>:kind==="inbox"?<div className="inbox-list">{rows.length?rows.map(row=><article key={row.id}><span><PackageCheck/></span><div><strong>Order {row.order_number} is {String(row.status).replaceAll("_"," ")}</strong><p>Your order total is {money(Number(row.total))}. Open Orders for full tracking details.</p><small>{new Date(row.created_at).toLocaleString()}</small></div></article>):<div className="panel-empty"><Mail/><h3>Your inbox is clear</h3><p>Updates about your orders will appear here automatically.</p></div>}</div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
+  {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:kind==="account"?<div className="account-panel-content"><div className="account-avatar">{String(rows[0]?.full_name||rows[0]?.email||"T").charAt(0).toUpperCase()}</div><span>Taiga customer</span><h3>{rows[0]?.full_name}</h3><p>{rows[0]?.email}</p><dl><div><dt>Account status</dt><dd>Active</dd></div><div><dt>Member since</dt><dd>{rows[0]?.created_at?new Date(rows[0].created_at).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}):"Recently joined"}</dd></div></dl><p>Your profile is connected to your secure Taiga sign-in.</p></div>:kind==="inbox"?<div className="inbox-list">{rows.length?rows.map(row=><article key={row.id}><span><PackageCheck/></span><div><strong>Order {row.order_number} is {String(row.status).replaceAll("_"," ")}</strong><p>Your order total is {money(Number(row.total))}. Open Orders for full tracking details.</p><small>{new Date(row.created_at).toLocaleString()}</small><a href={`/account/orders?order=${encodeURIComponent(row.id)}`}>View order details</a></div></article>):<div className="panel-empty"><Mail/><h3>Your inbox is clear</h3><p>Updates about your orders will appear here automatically.</p></div>}</div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
     
     {kind==="orders" ? rows.map(row=>{
       const isExpanded = expandedOrder === row.id;
       return (
         <article className="order-row" key={row.id} style={{ display: "flex", flexDirection: "column", gap: "0", alignItems: "stretch", padding: "0", overflow: "hidden" }}>
-          <div role="button" tabIndex={0} aria-expanded={isExpanded} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px", cursor: "pointer" }} onClick={() => setExpandedOrder(isExpanded ? null : row.id)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setExpandedOrder(isExpanded?null:row.id)}}}>
+          <button type="button" className="order-details-toggle" aria-expanded={isExpanded} aria-controls={`order-details-${row.id}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px", cursor: "pointer", width:"100%", textAlign:"left" }} onClick={() => setExpandedOrder(isExpanded ? null : row.id)}>
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <strong style={{ fontSize: "14px" }}>{row.order_number}</strong>
                 {isExpanded ? <ChevronUp size={14} style={{ color: "var(--muted)" }} /> : <ChevronDown size={14} style={{ color: "var(--muted)" }} />}
               </div>
               <span style={{ fontSize: "11px", color: "var(--muted)" }}>{new Date(row.created_at).toLocaleDateString()}</span>
+              <span>{isExpanded?"Hide details":"View details"}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
               <b style={{ fontSize: "14px" }}>{money(Number(row.total))}</b>
               <span className={`status ${row.status}`}>{row.status}</span>
             </div>
-          </div>
+          </button>
           
           <div style={{ padding: "0 16px 16px 16px", borderTop: "1px solid var(--border)" }}>
             <small style={{ display: "block", color: "var(--muted)", margin: "6px 0" }}>
@@ -197,7 +204,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
 
           {/* Collapsible shipping tracking timeline */}
           {isExpanded && (
-            <div style={{ background: "var(--secondary)", borderTop: "1px solid var(--border)", padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }} className="animate-scale-up">
+            <div id={`order-details-${row.id}`} style={{ background: "var(--secondary)", borderTop: "1px solid var(--border)", padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
               <h4 style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "800", letterSpacing: "0.08em", color: "var(--muted)" }}>Fulfillment Timeline</h4>
               
               {row.status === "cancelled" ? (
