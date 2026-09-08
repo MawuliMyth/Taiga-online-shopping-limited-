@@ -6,6 +6,7 @@ export function VisitorCounter(){
   const path=usePathname();const [consent,setConsent]=useState<string|null>(null);const [ready,setReady]=useState(false);
   const eligible=path==="/"||path==="/shop"||path==="/search"||path?.startsWith("/product/")||path?.startsWith("/help/");
   useEffect(()=>{try{setConsent(localStorage.getItem(preference))}catch{}setReady(true)},[]);
+  useEffect(()=>{const reopen=()=>setConsent(null);window.addEventListener("taiga-privacy-settings",reopen);return()=>window.removeEventListener("taiga-privacy-settings",reopen)},[]);
   useEffect(()=>{
     if(consent!=="yes"||!eligible||!path||navigator.doNotTrack==="1"||(navigator as Navigator&{globalPrivacyControl?:boolean}).globalPrivacyControl)return;
     try{
@@ -22,5 +23,5 @@ export function VisitorCounter(){
   },[path,consent,eligible]);
   function choose(value:string){try{localStorage.setItem(preference,value);if(value==="no"){localStorage.removeItem("taiga-visitor");sessionStorage.removeItem("taiga-visit");sessionStorage.removeItem("taiga-view")}}catch{}setConsent(value)}
   if(!ready||!eligible)return null;
-  return consent===null?<aside className="visitor-consent" aria-label="Optional visitor statistics"><p>Allow anonymous visitor statistics? We count visits and popular pages without collecting your name, email or IP address. Shopping works either way.</p><div><button type="button" onClick={()=>choose("no")}>No thanks</button><button type="button" onClick={()=>choose("yes")}>Allow statistics</button></div></aside>:<button type="button" className="visitor-preferences" onClick={()=>setConsent(null)}>Privacy choices</button>;
+  return consent===null?<aside className="visitor-consent" aria-label="Optional visitor statistics"><p>Allow anonymous visitor statistics? We count visits and popular pages without collecting your name, email or IP address. Shopping works either way.</p><div><button type="button" onClick={()=>choose("no")}>No thanks</button><button type="button" onClick={()=>choose("yes")}>Allow statistics</button></div></aside>:null;
 }
