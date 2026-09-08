@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useSessionTimeout } from "../../lib/use-session-timeout";
+import { VisitorAnalytics } from "./VisitorAnalytics";
 import { allowedOrderStatuses, canTransitionOrder } from "../../lib/order-rules";
 import { AuthModal } from "../components/AuthModal";
 import DeliveryRates from "./DeliveryRates";
@@ -773,6 +774,7 @@ export default function Admin(){
 
           {tab==="Analytics" && (
             <>
+              <VisitorAnalytics/>
               <section className="revenue-export-panel" aria-labelledby="revenue-export-title">
                 <div><span className="admin-eyebrow">Revenue archive</span><h2 id="revenue-export-title">Download revenue report</h2><p>Export current, previous or all-time order revenue for Excel and Google Sheets.</p></div>
                 <div className="revenue-export-controls"><label>Report period<select value={exportScope} onChange={event=>setExportScope(event.target.value as typeof exportScope)}><option value="current">Current period</option><option value="previous" disabled={!auditLogs.some(log=>log.action==="revenue.reporting_period_started")}>Previous period</option><option value="all">All time</option><option value="custom">Custom dates</option></select></label>{exportScope==="custom"&&<><label>Start date<input type="date" value={exportStart} onChange={event=>setExportStart(event.target.value)}/></label><label>End date<input type="date" value={exportEnd} onChange={event=>setExportEnd(event.target.value)}/></label></>}<button onClick={downloadRevenueReport}><Download size={16}/> Download CSV</button></div>

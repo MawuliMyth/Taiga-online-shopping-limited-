@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { VisitorCounter } from "./components/VisitorCounter";
 
 const inter = Inter({
   variable: "--font-ui",
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         {children}
+        <VisitorCounter/>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
