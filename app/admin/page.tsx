@@ -83,7 +83,7 @@ export default function Admin(){
 
   // Quick order viewer state
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
-  useSessionTimeout(30,()=>{setEditing(null);setEditingBanner(null);setNotice("Your admin session timed out after 30 minutes of inactivity. Please sign in again.")});
+  useSessionTimeout(60,()=>{setEditing(null);setEditingBanner(null);setNotice("Your admin session timed out after 60 minutes of inactivity. Please sign in again.")},access==="allowed");
 
   async function check(){
     const {data:{user}}=await supabase.auth.getUser();

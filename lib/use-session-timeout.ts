@@ -3,10 +3,11 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 
-export function useSessionTimeout(minutes:number,onTimeout?:()=>void){
+export function useSessionTimeout(minutes:number,onTimeout?:()=>void,enabled=true){
   const timeoutHandler=useRef(onTimeout);
   useEffect(()=>{timeoutHandler.current=onTimeout},[onTimeout]);
   useEffect(()=>{
+    if(!enabled)return;
     const timeoutMs=Math.max(1,minutes)*60*1000;
     let lastActivity=Date.now();
     let lastRecorded=0;
@@ -27,7 +28,8 @@ export function useSessionTimeout(minutes:number,onTimeout?:()=>void){
         const {data:{session}}=await supabase.auth.getSession();
         if(!session)return;
         if(Date.now()-lastActivity>=timeoutMs){
-          await supabase.auth.signOut();
+          const {error}=await supabase.auth.signOut({scope:"local"});
+          if(error)return;
           timeoutHandler.current?.();
           return;
         }
@@ -48,5 +50,5 @@ export function useSessionTimeout(minutes:number,onTimeout?:()=>void){
       window.removeEventListener("focus",maintainSession);
       window.clearInterval(interval);
     };
-  },[minutes]);
+  },[minutes,enabled]);
 }

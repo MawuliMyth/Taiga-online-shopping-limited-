@@ -8,6 +8,7 @@ import {
   ShieldCheck, ShoppingCart, Trash2, X, Clock, Truck, PackageCheck, 
   ClipboardCheck, ChevronDown, ChevronUp, AlertCircle, UserRound, Mail, MessageCircle, Copy
 } from "lucide-react";
+import { readDeliveryAddress } from "../../lib/account-rules";
 import { supabase } from "../../lib/supabase";
 import { nigeriaCities, nigeriaStates } from "../data/nigeriaLocations";
 
@@ -28,11 +29,13 @@ function addressInputRules(key:string){
   return {minLength:2,maxLength:80};
 }
 
-export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist"|"orders"|"account"|"inbox";user:User;onClose:()=>void;onChanged:()=>void}){
+export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist";user:User;onClose:()=>void;onChanged:()=>void}){
   const router=useRouter();
+  const mutationLock=useRef(false);
+  const [updating,setUpdating]=useState(false);
   const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[checkout,setCheckout]=useState(false),[step,setStep]=useState(1),[error,setError]=useState(""),[addressError,setAddressError]=useState("");
   const [supportPhone,setSupportPhone]=useState("");
-  const [address,setAddress]=useState({first_name:"",last_name:"",phone:"",additional_phone:"",line1:"",additional_info:"",state:"",city:""});
+  const [address,setAddress]=useState(()=>readDeliveryAddress(user.user_metadata?.delivery_address));
   const [delivery,setDelivery]=useState<""|"standard">("");
   const [deliveryQuote,setDeliveryQuote]=useState<{amount:number;reference:string;expiresAt:number;weight:number;minDays:number;maxDays:number}|null>(null);
   const [quoting,setQuoting]=useState(false);
@@ -40,8 +43,6 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   const [selectedBank,setSelectedBank]=useState<(typeof BANK_ACCOUNTS)[number]["id"]>("access");
   const [copiedAccount,setCopiedAccount]=useState("");
   
-  // Track expanded order row for detailed timeline
-  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const cartItemCount=kind==="cart"?rows.reduce((sum,row)=>sum+Number(row.quantity||0),0):0;
 
   function validateAddress(){
@@ -61,32 +62,18 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     setError("");
     const settingsResult=await supabase.from("store_settings").select("standard_shipping_fee,support_phone").eq("id",1).maybeSingle();
     if(settingsResult.data){setSupportPhone(settingsResult.data.support_phone||"")}
-    if(kind==="account"){
-      const {data}=await supabase.from("profiles").select("full_name,email,created_at").eq("id",user.id).maybeSingle();
-      setRows([{...(data??{}),email:data?.email||user.email,full_name:data?.full_name||user.user_metadata?.full_name||"Taiga customer"}]);
-    }else if(kind==="inbox"){
-      const {data,error:loadError}=await supabase.from("orders").select("id,order_number,status,created_at,total").eq("user_id",user.id).order("created_at",{ascending:false});
-      if(loadError)setError("Unable to load your orders. Please try again.");
-      setRows(data??[]);
-    }else if(kind==="cart"){
+    if(kind==="cart"){
       const {data,error:loadError}=await supabase.from("cart_items").select("product_id,variant_key,selected_variant,quantity,products(name,slug,price,image_url,inventory,variants)").eq("user_id",user.id);
       if(loadError)setError(loadError.message);
       setRows(data??[]);
     }else if(kind==="wishlist"){
       const {data}=await supabase.from("wishlist_items").select("product_id,products(name,slug,price,image_url,inventory,variants)").eq("user_id",user.id);
       setRows(data??[]);
-    }else{
-      const {data,error:loadError}=await supabase.from("orders").select("id,order_number,total,status,created_at,shipping_address,order_items(product_name,quantity,selected_variant)").eq("user_id",user.id).order("created_at",{ascending:false});
-      if(loadError)setError("Unable to load your orders. Please try again.");
-      setRows(data??[]);
     }
     setLoading(false);
   },[kind,user.email,user.id,user.user_metadata?.full_name]);
 
   useEffect(()=>{void load()},[load]);
-  useEffect(()=>{
-    if(kind==="orders")setExpandedOrder(new URLSearchParams(window.location.search).get("order"));
-  },[kind]);
 
   useEffect(()=>{
     quoteRequest.current++;setDeliveryQuote(null);setDelivery("");setQuoting(false);setStep(current=>current===3?2:current);
@@ -114,12 +101,17 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
   }
 
   async function quantity(row:CartRow,next:number){
+    if(mutationLock.current)return;
+    mutationLock.current=true;setUpdating(true);
+    try{
     const variantStock=Array.isArray(row.products?.variants)?row.products?.variants.find((variant:any)=>variant.id===row.variant_key)?.inventory:null;
     const result=next<1?await supabase.from("cart_items").delete().eq("user_id",user.id).eq("product_id",row.product_id).eq("variant_key",row.variant_key||"default"):await supabase.from("cart_items").update({quantity:Math.min(next,99,Number(variantStock??row.products?.inventory??next))}).eq("user_id",user.id).eq("product_id",row.product_id).eq("variant_key",row.variant_key||"default");
     if(result.error){setError("Cart quantity could not be updated. Please try again.");return}
     setError("");
-    await load();
+    setRows(current=>next<1?current.filter(item=>!(item.product_id===row.product_id&&item.variant_key===row.variant_key)):current.map(item=>item.product_id===row.product_id&&item.variant_key===row.variant_key?{...item,quantity:Math.min(next,99,Number(variantStock??row.products?.inventory??next))}:item));
     onChanged();
+    }catch{setError("Cart quantity could not be updated. Please try again.")}
+    finally{mutationLock.current=false;setUpdating(false)}
   }
 
   async function remove(id:string,variantKey="default"){
@@ -128,7 +120,7 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     const {error:removeError}=await query;
     if(removeError){setError("This item could not be removed. Please try again.");return}
     setError("");
-    await load();
+    setRows(current=>current.filter(row=>!(row.product_id===id&&(kind!=="cart"||row.variant_key===variantKey))));
     onChanged();
   }
 
@@ -174,121 +166,17 @@ export function StorePanels({kind,user,onClose,onChanged}:{kind:"cart"|"wishlist
     return `https://wa.me/${whatsappNumber(supportPhone)}?text=${encodeURIComponent(message)}`;
   }
 
-  return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside role="dialog" aria-modal="true" aria-label={kind==="cart"?"Shopping cart":kind} className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:kind==="wishlist"?<Heart/>:kind==="account"?<UserRound/>:kind==="inbox"?<Mail/>:<Package/>}<h2>{kind==="cart"?`Your Cart${cartItemCount>0?` (${cartItemCount})`:""}`:kind==="wishlist"?"Saved items":kind==="account"?"My account":kind==="inbox"?"Inbox":"Your orders"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
-  {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:kind==="account"?<div className="account-panel-content"><div className="account-avatar">{String(rows[0]?.full_name||rows[0]?.email||"T").charAt(0).toUpperCase()}</div><span>Taiga customer</span><h3>{rows[0]?.full_name}</h3><p>{rows[0]?.email}</p><dl><div><dt>Account status</dt><dd>Active</dd></div><div><dt>Member since</dt><dd>{rows[0]?.created_at?new Date(rows[0].created_at).toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}):"Recently joined"}</dd></div></dl><p>Your profile is connected to your secure Taiga sign-in.</p></div>:kind==="inbox"?<div className="inbox-list">{rows.length?rows.map(row=><article key={row.id}><span><PackageCheck/></span><div><strong>Order {row.order_number} is {String(row.status).replaceAll("_"," ")}</strong><p>Your order total is {money(Number(row.total))}. Open Orders for full tracking details.</p><small>{new Date(row.created_at).toLocaleString()}</small><a href={`/account/orders?order=${encodeURIComponent(row.id)}`}>View order details</a></div></article>):<div className="panel-empty"><Mail/><h3>Your inbox is clear</h3><p>Updates about your orders will appear here automatically.</p></div>}</div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
+  return <div className="panel-overlay" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><aside role="dialog" aria-modal="true" aria-label={kind==="cart"?"Shopping cart":kind} className={`store-panel ${kind === "cart" ? "cart-panel" : ""} ${checkout ? "checkout-wide" : ""}`} style={{ display: "flex", flexDirection: "column" }}><header><div>{kind==="cart"?<ShoppingCart/>:<Heart/>}<h2>{kind==="cart"?`Your Cart${cartItemCount>0?` (${cartItemCount})`:""}`:"Saved items"}</h2></div><button onClick={onClose} aria-label="Close"><X/></button></header>
+  {loading?<div className="panel-shimmer" aria-label="Loading"><span/><span/><span/></div>:rows.length===0?<div className="panel-empty"><ShoppingCart/><h3>Your {kind==="cart"?"cart":kind==="wishlist"?"wishlist":"order history"} is empty</h3><p>Explore the store and discover something you’ll love.</p><button onClick={onClose}>Browse products</button></div>:<div className="panel-list">
     
-    {kind==="orders" ? rows.map(row=>{
-      const isExpanded = expandedOrder === row.id;
-      return (
-        <article className="order-row" key={row.id} style={{ display: "flex", flexDirection: "column", gap: "0", alignItems: "stretch", padding: "0", overflow: "hidden" }}>
-          <button type="button" className="order-details-toggle" aria-expanded={isExpanded} aria-controls={`order-details-${row.id}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px", cursor: "pointer", width:"100%", textAlign:"left" }} onClick={() => setExpandedOrder(isExpanded ? null : row.id)}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <strong style={{ fontSize: "14px" }}>{row.order_number}</strong>
-                {isExpanded ? <ChevronUp size={14} style={{ color: "var(--muted)" }} /> : <ChevronDown size={14} style={{ color: "var(--muted)" }} />}
-              </div>
-              <span style={{ fontSize: "11px", color: "var(--muted)" }}>{new Date(row.created_at).toLocaleDateString()}</span>
-              <span>{isExpanded?"Hide details":"View details"}</span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-              <b style={{ fontSize: "14px" }}>{money(Number(row.total))}</b>
-              <span className={`status ${row.status}`}>{row.status}</span>
-            </div>
-          </button>
-          
-          <div style={{ padding: "0 16px 16px 16px", borderTop: "1px solid var(--border)" }}>
-            <small style={{ display: "block", color: "var(--muted)", margin: "6px 0" }}>
-              {row.order_items?.map((item:any)=>`${item.product_name}${item.selected_variant?.options?` (${Object.values(item.selected_variant.options).join(" / ")})`:""} × ${item.quantity}`).join(", ")}
-            </small>
-          </div>
-
-          {/* Collapsible shipping tracking timeline */}
-          {isExpanded && (
-            <div id={`order-details-${row.id}`} style={{ background: "var(--secondary)", borderTop: "1px solid var(--border)", padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              <h4 style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "800", letterSpacing: "0.08em", color: "var(--muted)" }}>Fulfillment Timeline</h4>
-              
-              {row.status === "cancelled" ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--danger-light)", color: "var(--danger)", padding: "10px", borderRadius: "var(--radius-md)", fontSize: "12px", fontWeight: "600" }}>
-                  <AlertCircle size={16} />
-                  <span>This order has been cancelled. Contact support if you already made a payment.</span>
-                </div>
-              ) : (
-                <div style={{ display: "flex", justifyContent: "space-between", position: "relative", paddingBottom: "10px", marginTop: "8px" }}>
-                  <div style={{ position: "absolute", top: "11px", left: "15px", right: "15px", height: "2px", background: "var(--border)", zIndex: 1 }} />
-                  <div 
-                    style={{ 
-                      position: "absolute", 
-                      top: "11px", 
-                      left: "15px", 
-                      height: "2px", 
-                      background: "var(--primary)", 
-                      zIndex: 2, 
-                      transition: "width 0.4s ease",
-                      width: 
-                        row.status === "pending" ? "0%" :
-                        row.status === "paid" ? "25%" :
-                        row.status === "processing" ? "50%" :
-                        row.status === "shipped" ? "75%" :
-                        "100%"
-                    }} 
-                  />
-                  
-                  {[
-                    { state: "pending", label: "Ordered", icon: ClipboardCheck },
-                    { state: "paid", label: "Paid", icon: CreditCard },
-                    { state: "processing", label: "Packing", icon: Clock },
-                    { state: "shipped", label: "Transit", icon: Truck },
-                    { state: "delivered", label: "Delivered", icon: PackageCheck }
-                  ].map((step) => {
-                    const Icon = step.icon;
-                    const orderStatuses = ["pending", "paid", "processing", "shipped", "delivered"];
-                    const currentIdx = orderStatuses.indexOf(row.status);
-                    const stepIdx = orderStatuses.indexOf(step.state);
-                    const isCompleted = stepIdx <= currentIdx;
-                    const isCurrent = stepIdx === currentIdx;
-
-                    return (
-                      <div key={step.state} style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3, width: "50px" }}>
-                        <div 
-                          style={{ 
-                            width: "22px", 
-                            height: "22px", 
-                            borderRadius: "50%", 
-                            background: isCompleted ? "var(--primary)" : "var(--card-bg)", 
-                            color: isCompleted ? "#ffffff" : "var(--muted-light)",
-                            border: `1.5px solid ${isCompleted ? "var(--primary)" : "var(--border)"}`,
-                            display: "grid", 
-                            placeItems: "center",
-                            boxShadow: isCurrent ? "0 0 0 3px rgba(13, 122, 95, 0.2)" : "none"
-                          }}
-                        >
-                          <Icon size={10} />
-                        </div>
-                        <span style={{ fontSize: "9px", fontWeight: isCurrent ? "800" : "600", color: isCurrent ? "var(--foreground)" : "var(--muted)", marginTop: "4px", textAlign: "center" }}>
-                          {step.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              
-              <div style={{ fontSize: "11px", color: "var(--muted)", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
-                <span>Delivery: <strong>{row.shipping_address?.first_name} {row.shipping_address?.last_name}</strong></span>
-                <span style={{ display: "block", marginTop: "2px" }}>{row.shipping_address?.line1}, {row.shipping_address?.city}, {row.shipping_address?.state}</span>
-              </div>
-            </div>
-          )}
-        </article>
-      );
-    }) : rows.map(row=>{const variant=Array.isArray(row.products?.variants)?row.products.variants.find((item:any)=>item.id===row.variant_key):null,stock=Number(variant?.inventory??row.products?.inventory??0),price=Number(row.selected_variant?.price??variant?.price??row.products?.price??0),options=row.selected_variant?.options??variant?.options;return <article className="cart-row" key={`${row.product_id}-${row.variant_key||"default"}`}><img src={row.selected_variant?.image_url||variant?.image_url||row.products?.image_url} alt={row.products?.name||"Cart product"}/><div><h3>{row.products?.name}</h3><span className="cart-variant">{options?Object.entries(options).map(([key,value])=>`${key}: ${value}`).join(" · "):"Standard item"}</span><strong>{money(price)}</strong><small className="stock-note">{stock>0?`${stock} units available`:"Out of stock"}</small>{kind==="cart"?<div className="qty"><button onClick={()=>quantity(row,row.quantity-1)} aria-label="Decrease quantity"><Minus/></button><span>{row.quantity}</span><button disabled={row.quantity>=stock||stock<1} onClick={()=>quantity(row,row.quantity+1)} aria-label="Increase quantity"><Plus/></button></div>:<button className="move-cart" disabled={stock<1} onClick={()=>moveToCart(row)}>{stock<1?"Out of stock":Array.isArray(row.products?.variants)&&row.products.variants.length?"Choose options":"Add to cart"}</button>}</div><button className="remove-row" onClick={()=>remove(row.product_id,row.variant_key)} aria-label={`Remove ${row.products?.name||"product"}`}><Trash2/><span>Remove</span></button></article>})}
+    {rows.map(row=>{const variant=Array.isArray(row.products?.variants)?row.products.variants.find((item:any)=>item.id===row.variant_key):null,stock=Number(variant?.inventory??row.products?.inventory??0),price=Number(row.selected_variant?.price??variant?.price??row.products?.price??0),options=row.selected_variant?.options??variant?.options;return <article className="cart-row" key={`${row.product_id}-${row.variant_key||"default"}`}><img src={row.selected_variant?.image_url||variant?.image_url||row.products?.image_url} alt={row.products?.name||"Cart product"}/><div><h3><a href={`/product/${row.products?.slug}`}>{row.products?.name}</a></h3><span className="cart-variant">{options?Object.entries(options).map(([key,value])=>`${key}: ${value}`).join(" · "):"Standard item"}</span><strong>{money(price)}</strong><small className="stock-note">{stock>0?`${stock} units available`:"Out of stock"}</small>{kind==="cart"?<div className="qty"><button type="button" disabled={updating} onClick={()=>quantity(row,row.quantity-1)} aria-label="Decrease quantity"><Minus/></button><span>{row.quantity}</span><button type="button" disabled={updating||row.quantity>=stock||stock<1} onClick={()=>quantity(row,row.quantity+1)} aria-label="Increase quantity"><Plus/></button></div>:<button className="move-cart" disabled={stock<1} onClick={()=>moveToCart(row)}>{stock<1?"Out of stock":Array.isArray(row.products?.variants)&&row.products.variants.length?"Choose options":"Add to cart"}</button>}</div><button type="button" disabled={updating} className="remove-row" onClick={()=>remove(row.product_id,row.variant_key)} aria-label={`Remove ${row.products?.name||"product"}`}><Trash2/><span>Remove</span></button></article>})}
   </div>}
   {error&&!checkout&&<div className="checkout-error" role="alert">{error}</div>}
   {kind==="cart"&&rows.length>0&&<footer>
     <h4>Order summary</h4>
     <div><span>Subtotal</span><strong>{money(subtotal)}</strong></div>
     <div><span>Delivery</span><strong>{shipping===null?"Calculated at checkout":shipping===0?"FREE":money(shipping)}</strong></div>
-    <button onClick={()=>{setCheckout(true);setStep(1);setDelivery("standard");setError("")}}>Go to checkout</button>
+    <button type="button" disabled={updating} onClick={()=>{setCheckout(true);setStep(1);setDelivery("standard");setError("")}}>Go to checkout</button>
   </footer>}
   {checkout&&<div className="checkout-screen"><div className="checkout-main"><button className="back-checkout" onClick={()=>setCheckout(false)}>← Back to cart</button><div className="checkout-steps">{["Customer address","Delivery details","Payment method"].map((label,index)=><button className={step===index+1?"active":step>index+1?"complete":""} onClick={()=>step>index+1&&setStep(index+1)} key={label}><span>{step>index+1?<Check/>:index+1}</span>{label}</button>)}</div>
   {step===1&&<form className="address-form validated-form" noValidate onSubmit={event=>{event.preventDefault();if(!validateAddress())return;setAddress(current=>Object.fromEntries(Object.entries(current).map(([key,value])=>[key,value.trim()])) as typeof current);setStep(2)}}><div className="checkout-title"><span>Step 1 of 3</span><h3>Where should we deliver?</h3><p>Enter the recipient’s Nigerian delivery address.</p></div><div className="form-grid">{Object.entries(address).map(([key,value])=>key==="state"?<label key={key}>State<select value={value} onChange={event=>{setAddressError("");setAddress({...address,state:event.target.value,city:""})}} required><option value="">Select a state</option>{nigeriaStates.map(state=><option key={state} value={state}>{state}</option>)}</select></label>:key==="city"?<label key={key}>City<select value={value} onChange={event=>{setAddressError("");setAddress({...address,city:event.target.value})}} disabled={!address.state} required><option value="">{address.state?"Select a city":"Select a state first"}</option>{(nigeriaCities[address.state]??[]).map(city=><option key={city} value={city}>{city}</option>)}</select></label>:<label key={key}>{key==="line1"?"Street address":key.replaceAll("_"," ")}<input {...addressInputRules(key)} value={value} onChange={event=>{setAddressError("");setAddress({...address,[key]:event.target.value})}} required={!['additional_phone','additional_info'].includes(key)} placeholder={key==="phone"?"e.g. 08030000000":""}/></label>)}</div>{addressError&&<div className="form-error" role="alert"><AlertCircle/>{addressError}</div>}<div className="step-actions"><button type="button" onClick={()=>setCheckout(false)}>Cancel</button><button>Save & continue</button></div></form>}

@@ -9,8 +9,9 @@ import {
   ShieldCheck, ShoppingCart, Star, Truck, Award, X
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
-import { useSessionTimeout } from "../../../lib/use-session-timeout";
 import { nextCartQuantity, visibleProductBadge, selectProductOption, visibleSpecifications } from "../../../lib/product-rules";
+import { StorePanels } from "../../components/StorePanels";
+import type { User } from "@supabase/supabase-js";
 import { AuthModal } from "../../components/AuthModal";
 
 const money=(n:number)=>`₦${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -18,6 +19,8 @@ const hiddenCustomerOptions=new Set(["Operating System"]);
 const whatsappUrl=(phone:string)=>{const digits=phone.replace(/\D/g,"");const international=digits.startsWith("0")?`234${digits.slice(1)}`:digits;return `https://wa.me/${international}?text=${encodeURIComponent("Hello Taiga, I need help with this product.")}`};
 
 export default function ProductPage(){
+  const [cartOpen,setCartOpen]=useState(false);
+  const [cartUser,setCartUser]=useState<User|null>(null);
   const pathname=usePathname(),
         slug=decodeURIComponent(pathname?.split("/").filter(Boolean).pop()??"");
   
@@ -38,7 +41,6 @@ export default function ProductPage(){
         [reviewBusy,setReviewBusy]=useState(false),
         [zoomOpen,setZoomOpen]=useState(false),
         [cartCount,setCartCount]=useState(0);
-  useSessionTimeout(60,()=>{setAuthReason("Your session timed out after 60 minutes of inactivity. Please sign in again.");setAuth(true)});
 
   // Product page enhancements states
   const [activeTab, setActiveTab] = useState<"details" | "specs" | "warranty">("details");
@@ -87,14 +89,16 @@ export default function ProductPage(){
 
   useEffect(()=>{
     const refreshCartCount=async()=>{
-      const {data:{user}}=await supabase.auth.getUser();
+      const {data:{session}}=await supabase.auth.getSession();
+      const user=session?.user??null;
+      setCartUser(user);
       if(!user){setCartCount(0);return}
       const {data}=await supabase.from("cart_items").select("quantity").eq("user_id",user.id);
       setCartCount(data?.reduce((sum,row)=>sum+Number(row.quantity||0),0)??0);
     };
     refreshCartCount();
     window.addEventListener("focus",refreshCartCount);
-    const {data:{subscription}}=supabase.auth.onAuthStateChange(()=>refreshCartCount());
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{setCartUser(session?.user??null);window.setTimeout(()=>void refreshCartCount(),0)});
     return()=>{window.removeEventListener("focus",refreshCartCount);subscription.unsubscribe()};
   },[]);
 
@@ -224,7 +228,8 @@ export default function ProductPage(){
         ratingDistribution=[5,4,3,2,1].map(stars=>({stars,pct:reviews.length?Math.round(reviews.filter(review=>Number(review.rating)===stars).length/reviews.length*100):0}));
 
   return <div className="product-page">{auth&&<AuthModal reason={authReason} onClose={()=>setAuth(false)}/>} {notice&&<div className="toast">{notice}</div>}
-    <header className="product-top"><Link href="/" className="logo"><span>T</span>Taiga<small>MARKET</small></Link><Link href="/"><ArrowLeft/> Continue shopping</Link><Link href="/account/cart" className="product-cart-link" aria-label={`Cart${cartCount>0?`, ${cartCount} item${cartCount===1?"":"s"}`:""}`}><ShoppingCart/> Cart{cartCount>0&&<b data-count={cartCount}>{cartCount}</b>}</Link></header>
+    <header className="product-top"><Link href="/" className="logo"><span>T</span>Taiga<small>MARKET</small></Link><Link href="/"><ArrowLeft/> Continue shopping</Link><button type="button" onClick={()=>{setCartOpen(true);if(!cartUser)setAuth(true)}} className="product-cart-link" aria-label={`Cart${cartCount>0?`, ${cartCount} item${cartCount===1?"":"s"}`:""}`}><ShoppingCart/> Cart{cartCount>0&&<b data-count={cartCount}>{cartCount}</b>}</button></header>
+    {cartOpen&&cartUser&&<StorePanels kind="cart" user={cartUser} onClose={()=>setCartOpen(false)} onChanged={()=>window.dispatchEvent(new Event("focus"))}/> }
     <main className="product-wrap">
       <nav className="breadcrumbs"><Link href="/">Home</Link><span>›</span><Link href="/#categories">{product.categories?.name}</Link><span>›</span><b>{product.name}</b></nav>
       

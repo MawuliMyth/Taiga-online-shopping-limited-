@@ -34,3 +34,13 @@ test("server-renders the protected admin entry", async () => {
   assert.match(html, /Verifying access/);
   assert.match(html, /Return to storefront/);
 });
+
+test("customer account and order routes render without the old backdrop",async()=>{
+  for(const path of ["/account/account","/account/orders"]){
+    const response=await render(path);
+    assert.equal(response.status,200);
+    const html=await response.text();
+    assert.match(html,/customer-area/);
+    assert.doesNotMatch(html,/Secure customer area/);
+  }
+});

@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
-import { useSessionTimeout } from "../lib/use-session-timeout";
 import { availableProductStock, isNewProduct, nextCartQuantity, visibleProductBadge } from "../lib/product-rules";
 import { AuthModal } from "./components/AuthModal";
 import { StorePanels } from "./components/StorePanels";
@@ -92,7 +91,7 @@ export default function Home() {
   const [authReason,setAuthReason]=useState("Please sign in first to continue.");
   const [wishlist, setWishlist] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState("");
-  const [panel,setPanel]=useState<"cart"|"wishlist"|"orders"|"account"|"inbox"|null>(null);
+  const [panel,setPanel]=useState<"cart"|"wishlist"|null>(null);
   const [accountMenuOpen,setAccountMenuOpen]=useState(false);
   const [searchOpen,setSearchOpen]=useState(false);
   const [departmentsOpen,setDepartmentsOpen]=useState(false);
@@ -104,7 +103,6 @@ export default function Home() {
   const [heroSlide,setHeroSlide]=useState(0),[heroPaused,setHeroPaused]=useState(false);
   const [catalogCategories]=useState(defaultCategories);
   const [footerPanel,setFooterPanel]=useState<null|"story"|"delivery"|"returns"|"privacy"|"terms">(null);
-  useSessionTimeout(60,()=>{setUser(null);setPanel(null);setNotice("Your session timed out after 60 minutes of inactivity. Please sign in again.")});
 
   // Theme support
   const [theme, setTheme] = useState("light");
@@ -166,7 +164,7 @@ export default function Home() {
 
   function flash(text:string){setNotice(text); window.setTimeout(()=>setNotice(""),2400)}
   function requireAuth(reason:string){setAuthReason(reason);setShowAuth(true)}
-  async function openProtectedPanel(target:"cart"|"wishlist"|"orders"|"account"|"inbox",reason:string){setAccountMenuOpen(false);const current=user??(await supabase.auth.getSession()).data.session?.user??null;if(current){setUser(current);setShowAuth(false);setPanel(target);return}setPanel(target);requireAuth(reason)}
+  async function openProtectedPanel(target:"cart"|"wishlist"|"orders"|"account",reason:string){setAccountMenuOpen(false);if(target==="account"||target==="orders"){window.location.href=`/account/${target}`;return}const current=user??(await supabase.auth.getSession()).data.session?.user??null;if(current){setUser(current);setShowAuth(false);setPanel(target);return}setPanel(target);requireAuth(reason)}
   async function signOut(){setAccountMenuOpen(false);setPanel(null);await supabase.auth.signOut();flash("You have signed out safely")}
   
   async function addToCart(product: Product){
@@ -250,7 +248,6 @@ export default function Home() {
             {user&&accountMenuOpen&&<div className="account-dropdown" role="menu">
               <button role="menuitem" onClick={()=>openProtectedPanel("account","Please sign in to view your account.")}><UserRound/><span>My Account<small>Profile and account details</small></span></button>
               <button role="menuitem" onClick={()=>openProtectedPanel("orders","Please sign in first to track your orders.")}><ShoppingBag/><span>Orders<small>Track current purchases</small></span></button>
-              <button role="menuitem" onClick={()=>openProtectedPanel("inbox","Please sign in to view your inbox.")}><Mail/><span>Inbox<small>Order updates and notices</small></span></button>
               <button role="menuitem" onClick={()=>openProtectedPanel("wishlist","Please sign in first to view your wishlist.")}><Heart/><span>Wishlist<small>{wishlist.size} saved {wishlist.size===1?"item":"items"}</small></span></button>
               <button className="account-signout" role="menuitem" onClick={signOut}><LogOut/><span>Sign out<small>End this session</small></span></button>
             </div>}
