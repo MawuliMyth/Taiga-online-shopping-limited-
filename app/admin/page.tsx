@@ -133,7 +133,8 @@ export default function Admin(){
   }
 
   async function load(){
-    setLoading(true);
+    // Only the initial load replaces the dashboard. Background refreshes keep it mounted.
+    try{
     const [p,o,cats,users,subs,settingsResult,bannerResult,imageRows,logsResult]=await Promise.all([
       supabase.from("products").select("*,categories(name)").order("created_at",{ascending:false}),
       supabase.from("orders").select("*,order_items(product_name,quantity,unit_price,selected_variant)").order("created_at",{ascending:false}),
@@ -160,7 +161,8 @@ export default function Admin(){
     if(settingsResult.data) setStoreSettings(settingsResult.data);
     setBanners(bannerResult.data??[]);
     setCommerceTablesReady(!bannerResult.error&&!imageRows.error);
-    setLoading(false);
+    }catch{flash("Store data could not be refreshed. Please try again.")}
+    finally{setLoading(false)}
   }
 
   useEffect(()=>{
