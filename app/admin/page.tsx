@@ -14,13 +14,11 @@ import { useSessionTimeout } from "../../lib/use-session-timeout";
 import { VisitorAnalytics } from "./VisitorAnalytics";
 import { allowedOrderStatuses, canTransitionOrder } from "../../lib/order-rules";
 import { AuthModal } from "../components/AuthModal";
-import DeliveryRates from "./DeliveryRates";
 
-type Tab="Dashboard"|"Orders"|"Products"|"Customers"|"Administrators"|"Categories"|"Analytics"|"Marketing"|"Audit Logs"|"Settings"|"Delivery Rates";
+type Tab="Dashboard"|"Orders"|"Products"|"Customers"|"Administrators"|"Categories"|"Analytics"|"Marketing"|"Audit Logs"|"Settings";
 const navigation:[Tab,any][]=[
   ["Dashboard", LayoutDashboard],
   ["Orders", ShoppingCart],
-  ["Delivery Rates", PackageCheck],
   ["Products", Package],
   ["Customers", Users],
   ["Administrators", ShieldCheck],
@@ -877,7 +875,6 @@ export default function Admin(){
             </div>
           )}
 
-          {tab==="Delivery Rates" && <DeliveryRates/>}
           {tab==="Settings" && (
             <form className="panel settings-form" onSubmit={saveSettings} style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "32px", display: "flex", flexDirection: "column", gap: "20px" }}>
               <PanelTitle title="Store content & settings" sub="Configure parameters displayed publicly on the storefront" />
@@ -898,7 +895,6 @@ export default function Admin(){
                   <input type="tel" inputMode="tel" value={storeSettings.support_phone||""} onChange={e=>setStoreSettings({...storeSettings,support_phone:e.target.value})} required minLength={11} maxLength={18} pattern="(?:\\+234|0)(?:7[0-9]|8[0-9]|9[0-1])[0-9 ()-]{8,14}" title="Enter a valid Nigerian phone number." style={{ height: "40px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "0 12px", fontSize: "13px", background: "var(--card-bg)" }} />
                 </label>
                 
-                <p>Delivery charges are managed under <button type="button" onClick={()=>setTab("Delivery Rates")}>Delivery Rates</button>. Missing rates require a manual quote.</p>
               </div>
 
               <hr style={{ border: 0, borderTop: "1px solid var(--border)" }} />
