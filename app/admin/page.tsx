@@ -64,6 +64,9 @@ export default function Admin(){
         [notice,setNotice]=useState(""),
         [commerceTablesReady,setCommerceTablesReady]=useState(true),
         [showRevenueReset,setShowRevenueReset]=useState(false),
+        [showProductionReset,setShowProductionReset]=useState(false),
+        [resetConfirmation,setResetConfirmation]=useState(""),
+        [productionResetError,setProductionResetError]=useState(""),
         [resettingRevenue,setResettingRevenue]=useState(false),
         [exportScope,setExportScope]=useState<"current"|"previous"|"all"|"custom">("current"),
         [exportStart,setExportStart]=useState(""),
@@ -324,6 +327,18 @@ export default function Admin(){
     flash("A new revenue reporting period has started");
   }
 
+  async function resetProductionOrders(){
+    if(adminRole!=="owner"||resettingRevenue||resetConfirmation!=="DELETE ALL ORDERS")return;
+    setResettingRevenue(true);setProductionResetError("");
+    try{
+      const {error}=await supabase.rpc("reset_production_orders",{confirmation:resetConfirmation,expected_ids:orders.map(order=>order.id)});
+      if(error){setProductionResetError(error.message);return}
+      setShowProductionReset(false);setResetConfirmation("");setSelectedOrderDetails(null);setPage(1);
+      await load();flash("All orders deleted. Revenue reporting reset to zero.");
+    }catch{setProductionResetError("The reset could not be confirmed. Refresh to check the current orders before trying again.")}
+    finally{setResettingRevenue(false)}
+  }
+
   function downloadRevenueReport(){
     const latestReset=auditLogs.find(log=>log.action==="revenue.reporting_period_started");
     let periodStart:Date|null=null,periodEnd:Date|null=null,periodName="All time";
@@ -473,6 +488,7 @@ export default function Admin(){
   </main>;
   
   return <div className="dashboard-shell" style={{ display: "grid", gridTemplateColumns: "278px 1fr" }}>{notice&&<div className="toast">{notice}</div>}
+    {showProductionReset&&<div className="info-modal-overlay"><section className="info-modal revenue-reset-modal" role="dialog" aria-modal="true" aria-labelledby="production-reset-title"><h2 id="production-reset-title">Permanently delete all orders?</h2><p>This deletes {orders.length} orders and their line items, including customer order history, and resets revenue reporting. It cannot be undone from the dashboard.</p><p>Products, inventory, customers, settings, audit history and payment-verification references are preserved. No payments are refunded.</p><label>Type DELETE ALL ORDERS<input value={resetConfirmation} onChange={event=>setResetConfirmation(event.target.value)} autoComplete="off" disabled={resettingRevenue}/></label>{productionResetError&&<p role="alert">{productionResetError}</p>}<div className="info-actions"><button disabled={resettingRevenue} onClick={()=>setShowProductionReset(false)}>Cancel</button><button disabled={resettingRevenue||resetConfirmation!=="DELETE ALL ORDERS"} onClick={resetProductionOrders}>{resettingRevenue?"Deleting…":"Permanently delete orders"}</button></div></section></div>}
     {showRevenueReset&&<div className="info-modal-overlay" role="presentation" onMouseDown={event=>event.target===event.currentTarget&&!resettingRevenue&&setShowRevenueReset(false)}><section className="info-modal revenue-reset-modal" role="dialog" aria-modal="true" aria-labelledby="revenue-reset-title"><button className="info-close" onClick={()=>setShowRevenueReset(false)} disabled={resettingRevenue} aria-label="Close"><X/></button><span className="kicker">Financial reporting</span><h2 id="revenue-reset-title">Start a new reporting period?</h2><p>The dashboard revenue, order count, basket average, units and revenue charts will restart from zero. Existing orders, receipts and customer history will remain available.</p><div className="revenue-reset-summary"><ShieldCheck/><span><strong>No financial records will be deleted</strong><small>The reset time and administrator will be recorded in Audit Logs.</small></span></div><div className="info-actions"><button onClick={()=>setShowRevenueReset(false)} disabled={resettingRevenue}>Cancel</button><button className="danger-confirm" onClick={startNewReportingPeriod} disabled={resettingRevenue}>{resettingRevenue?"Starting…":"Start new period"}</button></div></section></div>}
     <aside className="sidebar" style={{ width: "100%", height: "100vh", position: "sticky", top: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", padding: "16px 20px" }}>
@@ -518,7 +534,7 @@ export default function Admin(){
             <h1 style={{ fontSize: "28px", fontWeight: 900, marginTop: "4px" }}>{tab}</h1>
             <p style={{ fontSize: "13px", color: "var(--muted)" }}>Manage and monitor Taiga Online Shopping Limited in real time.</p>
           </div>
-          <div className="heading-actions"><div className="admin-date"><Clock size={16}/>{new Intl.DateTimeFormat("en-NG",{day:"2-digit",month:"short",year:"numeric"}).format(new Date())}</div>{(tab==="Dashboard"||tab==="Analytics")&&<button className="reporting-reset-action" onClick={()=>setShowRevenueReset(true)}><RotateCcw size={15}/> Start new reporting period</button>}{tab==="Products"&&<button className="primary-action" onClick={()=>setEditing({...emptyProduct})} style={{ padding: "10px 20px", display: "flex", gap: "8px", alignItems: "center" }}><Plus/> Add product</button>}</div>
+          <div className="heading-actions">{adminRole==="owner"&&(tab==="Dashboard"||tab==="Analytics")&&<button className="reporting-reset-action" onClick={()=>{setResetConfirmation("");setProductionResetError("");setShowProductionReset(true)}}>Reset orders &amp; revenue</button>}<div className="admin-date"><Clock size={16}/>{new Intl.DateTimeFormat("en-NG",{day:"2-digit",month:"short",year:"numeric"}).format(new Date())}</div>{(tab==="Dashboard"||tab==="Analytics")&&<button className="reporting-reset-action" onClick={()=>setShowRevenueReset(true)}><RotateCcw size={15}/> Start new reporting period</button>}{tab==="Products"&&<button className="primary-action" onClick={()=>setEditing({...emptyProduct})} style={{ padding: "10px 20px", display: "flex", gap: "8px", alignItems: "center" }}><Plus/> Add product</button>}</div>
         </div>
 
         {loading ? <div className="admin-loading">Loading live store data…</div> : <>
