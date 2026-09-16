@@ -1,4 +1,5 @@
 "use client";
+import { priceLabel } from "../lib/price-range";
 /* eslint-disable @next/next/no-img-element -- Store media is supplied dynamically by the catalogue and optimized at upload time. */
 
 import { useEffect, useMemo, useState } from "react";
@@ -69,8 +70,8 @@ function ProductCard({ product, onAdd, onLike, isLiked }: { product: Product; on
       <div className="rating"><Star size={14} fill={product.rating>0?"currentColor":"none"} /> {product.rating>0?product.rating.toFixed(1):"Not rated"}</div>
       <div className="product-bottom">
         <div>
-          <strong>₦{product.price.toLocaleString()}</strong>
-          {product.old > product.price && <del style={{ marginLeft: "8px", fontSize: "11px", color: "var(--muted-light)" }}>₦{product.old.toLocaleString()}</del>}
+          <strong>{priceLabel(product)}</strong>
+          {!product.variants?.some(v=>v.active!==false) && product.old > product.price && <del style={{ marginLeft: "8px", fontSize: "11px", color: "var(--muted-light)" }}>₦{product.old.toLocaleString()}</del>}
         </div>
         <button disabled={availableProductStock(product)<1} onClick={(e) => { e.preventDefault(); onAdd(); }} aria-label={availableProductStock(product)<1?`${product.name} is out of stock`:`Add ${product.name} to cart`}><ShoppingCart size={17} /></button>
       </div>
@@ -238,7 +239,7 @@ export default function Home() {
     <header className="site-header">
       <div className="header-main wrap">
         <Link href="/" className="logo"><img className="brand-logo-image" src="/taiga-logo.png" alt="Taiga Online Shopping Limited" /></Link>
-        <div className="search-shell"><form className="search" onSubmit={event=>{event.preventDefault();window.location.href=`/search?q=${encodeURIComponent(query.trim())}`}}><Search size={19} /><input value={query} onFocus={()=>setSearchOpen(true)} onChange={e => {setQuery(e.target.value);setSearchOpen(true)}} placeholder="Search products, brands and categories" /><button type="submit">Search</button></form>{searchOpen&&<div className="search-popover"><div className="search-popover-title"><span>{query?"Matching products":"Trending searches"}</span><button onClick={()=>setSearchOpen(false)}><X size={16}/></button></div>{query?<div className="search-results">{liveProducts.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())).slice(0,5).map(p=><button key={p.id} onClick={()=>window.location.href=`/search?q=${encodeURIComponent(p.name)}`}><img src={p.image} alt=""/><span>{p.name}<small>{p.category}</small></span><strong>₦{p.price.toLocaleString()}</strong></button>)}</div>:<div className="trend-tags">{["headphones","air fryer","iphone","shoes for men","smart watch"].map(t=><button key={t} onClick={()=>window.location.href=`/search?q=${encodeURIComponent(t)}`}>{t}</button>)}</div>}</div>}</div>
+        <div className="search-shell"><form className="search" onSubmit={event=>{event.preventDefault();window.location.href=`/search?q=${encodeURIComponent(query.trim())}`}}><Search size={19} /><input value={query} onFocus={()=>setSearchOpen(true)} onChange={e => {setQuery(e.target.value);setSearchOpen(true)}} placeholder="Search products, brands and categories" /><button type="submit">Search</button></form>{searchOpen&&<div className="search-popover"><div className="search-popover-title"><span>{query?"Matching products":"Trending searches"}</span><button onClick={()=>setSearchOpen(false)}><X size={16}/></button></div>{query?<div className="search-results">{liveProducts.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())).slice(0,5).map(p=><button key={p.id} onClick={()=>window.location.href=`/search?q=${encodeURIComponent(p.name)}`}><img src={p.image} alt=""/><span>{p.name}<small>{p.category}</small></span><strong>{priceLabel(p)}</strong></button>)}</div>:<div className="trend-tags">{["headphones","air fryer","iphone","shoes for men","smart watch"].map(t=><button key={t} onClick={()=>window.location.href=`/search?q=${encodeURIComponent(t)}`}>{t}</button>)}</div>}</div>}</div>
         <div className="header-actions">
           <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle dark mode">
             {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}

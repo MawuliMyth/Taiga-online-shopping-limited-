@@ -1,4 +1,5 @@
 "use client";
+import { priceLabel } from "../../../lib/price-range";
 /* eslint-disable @next/next/no-img-element -- Product media is supplied dynamically by the catalogue and optimized at upload time. */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -64,7 +65,7 @@ export default function ProductPage(){
       setSelectedOptions({});
       setLoading(false);
       
-      const {data:r}=await supabase.from("products").select("id,slug,name,price,image_url,badge,sales_count,rating,created_at").eq("category_id",data.category_id).eq("is_active",true).neq("id",data.id).order("sales_count",{ascending:false}).order("rating",{ascending:false}).limit(5);
+      const {data:r}=await supabase.from("products").select("id,slug,name,price,variants,image_url,badge,sales_count,rating,created_at").eq("category_id",data.category_id).eq("is_active",true).neq("id",data.id).order("sales_count",{ascending:false}).order("rating",{ascending:false}).limit(5);
       setRelated(r??[]);
       
       // Check if product is in wishlist
@@ -220,7 +221,7 @@ export default function ProductPage(){
         selectedVariant=matchingVariants.find((variant:any)=>Number(variant.inventory)>0)??matchingVariants[0],
         price=Number(selectedVariant?.price??product.price),
         old=Number(product.compare_at_price??price),
-        discount=old>price?Math.round((old-price)/old*100):0,
+        discount=(!variants.length||selectedVariant)&&old>price?Math.round((old-price)/old*100):0,
         availableInventory=selectedVariant?Number(selectedVariant.inventory):variants.length?variants.reduce((sum:number,variant:any)=>sum+Number(variant.inventory||0),0):Number(product.inventory),
         gallery=(product.product_images??[]).sort((a:any,b:any)=>a.sort_order-b.sort_order).map((i:any)=>i.image_url).filter(Boolean),
         images=Array.from(new Set([...(gallery.length?gallery:[product.image_url]),...variants.map((variant:any)=>variant.image_url).filter(Boolean)])) as string[],
@@ -263,8 +264,8 @@ export default function ProductPage(){
           <p style={{ marginTop: "8px", fontSize: "13px", color: "var(--muted)" }}>Brand: <strong style={{ color: "var(--foreground)" }}>Taiga Select</strong> · <a href="#related" style={{ color: "var(--primary)", fontWeight: "650" }}>View similar products</a></p>
           
           <div className="detail-price" style={{ marginTop: "20px" }}>
-            <strong style={{ fontSize: "32px", fontWeight: 900 }}>{money(price)}</strong>
-            {old>price&&<>
+            <strong style={{ fontSize: "32px", fontWeight: 900 }}>{selectedVariant?money(price):priceLabel(product)}</strong>
+            {(!variants.length||selectedVariant)&&old>price&&<>
               <del style={{ fontSize: "16px", color: "var(--muted-light)" }}>{money(old)}</del>
               <span style={{ background: "var(--danger-light)", color: "var(--danger)", padding: "4px 8px", borderRadius: "var(--radius-sm)", fontSize: "12px", fontWeight: 800 }}>-{discount}%</span>
             </>}
@@ -387,7 +388,7 @@ export default function ProductPage(){
               <img src={r.image_url} alt={r.name} loading="lazy" />
             </div>
             <strong>{r.name}</strong>
-            <span>{money(Number(r.price))}</span>
+            <span>{priceLabel(r)}</span>
           </Link>)}
         </div>
       </section>}
@@ -465,7 +466,7 @@ export default function ProductPage(){
           <img src={images[0]} alt={product.name} style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "var(--radius-sm)" }} />
           <div style={{ minWidth: 0 }}>
             <strong style={{ fontSize: "13px", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--foreground)" }}>{product.name}</strong>
-            <span style={{ fontSize: "12px", color: "var(--primary)", fontWeight: "750" }}>{money(price)}</span>
+            <span style={{ fontSize: "12px", color: "var(--primary)", fontWeight: "750" }}>{selectedVariant?money(price):priceLabel(product)}</span>
           </div>
         </div>
         <button 

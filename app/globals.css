@@ -5409,3 +5409,6 @@ img {
 .visitor-tables table { width:100%; border-collapse:collapse; font-size:.875rem; }.visitor-tables th,.visitor-tables td { text-align:left; padding:12px 8px; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
 .visitor-note { color:var(--muted); }
 @media(max-width:760px){.visitor-numbers{grid-template-columns:repeat(2,minmax(0,1fr))}.visitor-tables{grid-template-columns:1fr}.visitor-analytics{padding:16px}}
+.catalogue-price{flex-wrap:wrap}
+.catalogue-price strong,.product-bottom>div{min-width:0;overflow-wrap:anywhere;white-space:normal}
+.catalogue-price button,.product-bottom>button{flex-shrink:0}
