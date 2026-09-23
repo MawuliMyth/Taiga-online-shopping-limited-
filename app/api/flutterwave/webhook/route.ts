@@ -1,13 +1,12 @@
 import { apiError, CommerceError } from "../../../../lib/server-commerce";
-import { testConfig, verifyTest } from "../../../../lib/flutterwave-test";
+import { readPaymentJson, validReference, verifyFlutterwave, webhookAuthorized } from "../../../../lib/flutterwave";
 export async function POST(request:Request){
   try{
-    const {hash}=testConfig();
-    if(request.headers.get("verif-hash")!==hash)throw new CommerceError("Invalid webhook signature.",401);
-    const text=await request.text();
-    if(text.length>65536)throw new CommerceError("Webhook too large.",413);
-    const event=JSON.parse(text);
+    if(!await webhookAuthorized(request.headers.get("verif-hash")))throw new CommerceError("Invalid webhook signature.",401);
+    const event=await readPaymentJson(request,65536);
     if(event.event!=="charge.completed"||event.data?.status!=="successful")return Response.json({ok:true,ignored:true});
-    return Response.json(await verifyTest(event.data.id));
+    if(!validReference(event.data?.tx_ref))return Response.json({ok:true,ignored:true});
+    await verifyFlutterwave(event.data.tx_ref,String(event.data.id));
+    return Response.json({ok:true});
   }catch(error){return apiError(error)}
 }
