@@ -1,12 +1,14 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft, Check, Clock3, ShieldCheck, Mail, RefreshCw } from "lucide-react";
+import styles from "./payment-return.module.css";
 import { supabase } from "../../../lib/supabase";
 import { AuthModal } from "../../components/AuthModal";
 
 export default function PaymentReturn() {
   const [message,setMessage] = useState("Checking your payment…");
-  const [busy,setBusy] = useState(false);
+  const [busy,setBusy] = useState(true);
   const [reference,setReference] = useState("");
   const [paid,setPaid] = useState(false);
   const [signIn,setSignIn] = useState(false);
@@ -37,16 +39,27 @@ export default function PaymentReturn() {
     finally { setBusy(false); locked.current=false; }
   }, []);
   useEffect(()=>{ void verify(); },[verify]);
-  return <main style={{maxWidth:640,margin:"48px auto",padding:24,lineHeight:1.7}}>
-    <Link href="/">Taiga Online Shopping Limited</Link>
-    <h1>{paid ? "Thank you for your order" : "Payment status"}</h1>
-    <p role="status" aria-live="polite">{message}</p>
-    {reference && <p style={{overflowWrap:"anywhere"}}>Payment reference: <strong>{reference}</strong></p>}
-    <div style={{display:"flex",gap:16,flexWrap:"wrap",marginTop:24}}>
-      {!paid && <button type="button" onClick={()=>void verify()} disabled={busy} style={{padding:"12px 20px",background:"var(--primary, #087f68)",color:"white",borderRadius:8}}>{busy ? "Verifying…" : "Check payment again"}</button>}
-      <Link href="/">Return to store</Link><a href="mailto:sales@taigaonlineshoppinglimited.com">Contact support</a>
+  return <main className={styles.page}>
+    <div className={styles.shell}>
+    <header className={styles.header}>
+      <Link href="/" aria-label="Taiga home"><img src="/taiga-logo.png" alt="Taiga Online Shopping Limited" className={styles.logo}/></Link>
+      <span><ShieldCheck size={17} aria-hidden="true"/> Payment status</span>
+    </header>
+    <section className={styles.card} aria-labelledby="payment-title" aria-busy={busy}>
+      <div className={`${styles.icon} ${paid ? styles.confirmed : ""}`} aria-hidden="true">{paid ? <Check size={32}/> : busy ? <RefreshCw size={30} className={styles.spin}/> : <Clock3 size={32}/>}</div>
+      <span className={styles.eyebrow}>{paid ? "PAYMENT CONFIRMED" : busy ? "VERIFYING PAYMENT" : "PAYMENT NOT YET CONFIRMED"}</span>
+      <h1 id="payment-title">{paid ? "Thank you for your order" : busy ? "Checking your payment" : "Let’s check your payment"}</h1>
+      <p className={styles.message} role="status" aria-live="polite">{message}</p>
+      {reference && <div className={styles.reference}><span>Payment reference</span><strong>{reference}</strong><small>Keep this reference if you contact our support team.</small></div>}
+      {!paid && <div className={styles.notice}><ShieldCheck size={21} aria-hidden="true"/><p><strong>Already been charged?</strong> Please don’t pay again while we check your payment.</p></div>}
+      <div className={styles.actions}>
+        {!paid && <button type="button" onClick={()=>void verify()} disabled={busy} className={styles.primary}><RefreshCw size={18} aria-hidden="true" className={busy ? styles.spin : ""}/>{busy ? "Checking payment…" : "Check payment again"}</button>}
+        <Link href="/" className={paid ? styles.primary : styles.secondary}><ArrowLeft size={18} aria-hidden="true"/>Return to store</Link>
+      </div>
+      <a className={styles.support} href="mailto:sales@taigaonlineshoppinglimited.com"><Mail size={17} aria-hidden="true"/>Contact Taiga support</a>
+    </section>
+    <p className={styles.footnote}>Payments processed by Flutterwave</p>
     </div>
-    {!paid && <p>If money left your account, do not make another payment while verification is pending.</p>}
     {signIn && <AuthModal showGoogle={false} reason="Sign in to verify your payment" onClose={()=>{setSignIn(false);void supabase.auth.getSession().then(({data})=>{if(data.session)void verify()});}}/>}
   </main>;
 }
