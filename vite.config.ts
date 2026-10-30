@@ -12,8 +12,16 @@ const { d1, r2 } = hostingConfig;
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
+  name: "taiga-online-shopping-limited",
+  account_id: "9ac072a378cde02b5ae9c631a83160bf",
+  workers_dev: false,
+  preview_urls: false,
+  routes: [
+    { pattern: "taigaonlineshoppinglimited.com/*", zone_name: "taigaonlineshoppinglimited.com" },
+    { pattern: "www.taigaonlineshoppinglimited.com/*", zone_name: "taigaonlineshoppinglimited.com" },
+  ],
   main: "./worker/index.ts",
-  compatibility_date: "2026-05-22",
+  compatibility_date: "2026-08-22",
   d1_databases: d1
     ? [
         {
